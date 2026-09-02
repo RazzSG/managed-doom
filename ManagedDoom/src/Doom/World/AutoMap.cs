@@ -298,6 +298,26 @@ namespace ManagedDoom
             return false;
         }
 
+        public void ZoomInOnce()
+        {
+            zoom += zoom / 16;
+
+            if (zoom > Fixed.One * 32)
+            {
+                zoom = Fixed.One * 32;
+            }
+        }
+
+        public void ZoomOutOnce()
+        {
+            zoom -= zoom / 16;
+
+            if (zoom < Fixed.One / 2)
+            {
+                zoom = Fixed.One / 2;
+            }
+        }
+        
         public void Open()
         {
             visible = true;

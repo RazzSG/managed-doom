@@ -28,6 +28,7 @@ namespace ManagedDoom
         private SelectableMenu skillMenu;
         private SelectableMenu optionMenu;
         private SelectableMenu volume;
+        private SelectableMenu crosshairMenu;
         private LoadMenu load;
         private SaveMenu save;
         private HelpScreen help;
@@ -200,6 +201,79 @@ namespace ManagedDoom
 
             var video = doom.Options.Video;
             var userInput = doom.Options.UserInput;
+            
+            crosshairMenu = new SelectableMenu(
+                this,
+                "M_OPTTTL", 108, 15,
+                0,
+
+                new TextToggleMenuItem(
+                    "CROSSHAIR",
+                    28, 30,
+                    60, 50,
+                    "ON",
+                    "OFF",
+                    215,
+                    () => video.Crosshair ? 0 : 1,
+                    value => video.Crosshair = value == 0),
+
+                new ChoiceMenuItem(
+                    "TYPE",
+                    28, 50,
+                    60, 70,
+                    [
+                        "CROSS",
+                        "CROSS 2",
+                        "DOT",
+                        "CIRCLE",
+                    ],
+                    215,
+                    () => video.CrosshairType,
+                    value => video.CrosshairType = value),
+
+                new TextSliderMenuItem(
+                    "SIZE",
+                    28, 70,
+                    60, 90,
+                    7,
+                    () => video.CrosshairSize - 1,
+                    value => video.CrosshairSize = value + 1),
+                
+                new TextSliderMenuItem(
+                    "THICKNESS",
+                    28, 90,
+                    60, 110,
+                    3,
+                    () => video.CrosshairThickness - 1,
+                    value => video.CrosshairThickness = value + 1),
+
+                new TextToggleMenuItem(
+                    "TARGET HEALTH COLOR",
+                    28, 110,
+                    60, 130,
+                    "ON",
+                    "OFF",
+                    215,
+                    () => video.CrosshairTargetHealthColor ? 0 : 1,
+                    value => video.CrosshairTargetHealthColor = value == 0),
+                
+                new ChoiceMenuItem(
+                    "COLOR",
+                    28, 130,
+                    60, 150,
+                    [
+                        "WHITE",
+                        "RED",
+                        "GREEN",
+                        "BLUE",
+                        "YELLOW",
+                        "CYAN",
+                        "MAGENTA"
+                    ],
+                    215,
+                    () => video.CrosshairColor,
+                    value => video.CrosshairColor = value));
+            
             optionMenu = new SelectableMenu(
                 this,
                 "M_OPTTTL", 108, 15,
@@ -231,7 +305,10 @@ namespace ManagedDoom
                 new SimpleMenuItem(
                     "M_SVOL", 28, 144 - 16, 60, 149 - 16,
                     null,
-                    volume));
+                    volume),
+                new TextMenuItem(
+                    "CROSSHAIR", 28, 145, 60, 165,
+                    crosshairMenu));
 
             load = new LoadMenu(
                 this,
@@ -286,6 +363,10 @@ namespace ManagedDoom
                 new SimpleMenuItem("M_RDTHIS", 65, 123, 97, 128, null, help),
                 new SimpleMenuItem("M_QUITG", 65, 139, 97, 144, null, quitConfirm));
             }
+            
+            optionMenu.Parent = main;
+            volume.Parent = optionMenu;
+            crosshairMenu.Parent = optionMenu;
 
             current = main;
             active = false;

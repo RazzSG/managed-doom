@@ -26,6 +26,8 @@ namespace ManagedDoom
     public static class DeHackEd
     {
         private static Tuple<Action<World, Player, PlayerSpriteDef>, Action<World, Mobj>>[] sourcePointerTable;
+        private static Dictionary<string, Action<World, Player, PlayerSpriteDef>> playerActionsByName;
+        private static Dictionary<string, Action<World, Mobj>> mobjActionsByName;
 
         public static void Initialize(CommandLineArgs args, Wad wad)
         {
@@ -107,11 +109,26 @@ namespace ManagedDoom
             if (sourcePointerTable == null)
             {
                 sourcePointerTable = new Tuple<Action<World, Player, PlayerSpriteDef>, Action<World, Mobj>>[DoomInfo.States.Length];
+                playerActionsByName = new Dictionary<string, Action<World, Player, PlayerSpriteDef>>(StringComparer.OrdinalIgnoreCase);
+                mobjActionsByName = new Dictionary<string, Action<World, Mobj>>(StringComparer.OrdinalIgnoreCase);
+
                 for (var i = 0; i < sourcePointerTable.Length; i++)
                 {
                     var playerAction = DoomInfo.States[i].PlayerAction;
                     var mobjAction = DoomInfo.States[i].MobjAction;
                     sourcePointerTable[i] = Tuple.Create(playerAction, mobjAction);
+
+                    if (playerAction != null)
+                    {
+                        var name = StripActionPrefix(playerAction.Method.Name);
+                        playerActionsByName.TryAdd(name, playerAction);
+                    }
+
+                    if (mobjAction != null)
+                    {
+                        var name = StripActionPrefix(mobjAction.Method.Name);
+                        mobjActionsByName.TryAdd(name, mobjAction);
+                    }
                 }
             }
 
@@ -187,6 +204,9 @@ namespace ManagedDoom
                         break;
                     case Block.BexPars:
                         ProcessBexParsBlock(data);
+                        break;
+                    case Block.BexCodePointers:
+                        ProcessBexCodePointersBlock(data);
                         break;
                 }
             }
@@ -443,6 +463,71 @@ namespace ManagedDoom
             }
         }
 
+        private static void ProcessBexCodePointersBlock(List<string> data)
+        {
+            foreach (var line in data.Skip(1))
+            {
+                var eqPos = line.IndexOf('=');
+                if (eqPos == -1)
+                {
+                    continue;
+                }
+
+                var left = line.Substring(0, eqPos).Trim();
+                var pointerName = line.Substring(eqPos + 1).Trim();
+
+                var leftSplit = left.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (leftSplit.Length < 2 || leftSplit[0] != "FRAME")
+                {
+                    continue;
+                }
+
+                int frameNumber;
+                if (!int.TryParse(leftSplit[1], out frameNumber))
+                {
+                    continue;
+                }
+
+                if (frameNumber < 0 || frameNumber >= DoomInfo.States.Length)
+                {
+                    continue;
+                }
+
+                var info = DoomInfo.States[frameNumber];
+
+                Action<World, Mobj> mobjAction;
+                Action<World, Player, PlayerSpriteDef> playerAction;
+
+                var mobjMatch = mobjActionsByName.TryGetValue(pointerName, out mobjAction);
+                var playerMatch = playerActionsByName.TryGetValue(pointerName, out playerAction);
+
+                if (mobjMatch)
+                {
+                    info.MobjAction = mobjAction;
+                }
+
+                if (playerMatch)
+                {
+                    info.PlayerAction = playerAction;
+                }
+
+                if (!mobjMatch && !playerMatch)
+                {
+                    Console.WriteLine("Warning: unknown code pointer '" + pointerName + "' for frame " + frameNumber + " in [CODEPTR] block");
+                }
+            }
+        }
+
+        private static string StripActionPrefix(string methodName)
+        {
+            if (methodName.Length > 2 && methodName[0] == 'A' && methodName[1] == '_')
+            {
+                return methodName.Substring(2);
+            }
+
+            return methodName;
+        }
+
         private static Block GetBlockType(string[] split)
         {
             if (IsThingBlockStart(split))
@@ -492,6 +577,10 @@ namespace ManagedDoom
             else if (IsBexParsBlockStart(split))
             {
                 return Block.BexPars;
+            }
+            else if (IsBexCodePointersBlockStart(split))
+            {
+                return Block.BexCodePointers;
             }
             else
             {
@@ -723,6 +812,18 @@ namespace ManagedDoom
             }
         }
 
+        private static bool IsBexCodePointersBlockStart(string[] split)
+        {
+            if (split[0] == "[CODEPTR]")
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
         private static bool IsNumber(string value)
         {
             foreach (var ch in value)
@@ -781,7 +882,8 @@ namespace ManagedDoom
             Text,
             Sprite,
             BexStrings,
-            BexPars
+            BexPars,
+            BexCodePointers
         }
     }
 }

@@ -54,10 +54,10 @@ namespace ManagedDoom
 
         public static Seg FromData(byte[] data, int offset, Vertex[] vertices, LineDef[] lines)
         {
-            var vertex1Number = BitConverter.ToInt16(data, offset);
-            var vertex2Number = BitConverter.ToInt16(data, offset + 2);
+            var vertex1Number = BitConverter.ToUInt16(data, offset);
+            var vertex2Number = BitConverter.ToUInt16(data, offset + 2);
             var angle = BitConverter.ToInt16(data, offset + 4);
-            var lineNumber = BitConverter.ToInt16(data, offset + 6);
+            var lineNumber = BitConverter.ToUInt16(data, offset + 6);
             var side = BitConverter.ToInt16(data, offset + 8);
             var segOffset = BitConverter.ToInt16(data, offset + 10);
 

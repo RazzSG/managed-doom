@@ -28,5 +28,6 @@ namespace ManagedDoom.UserInput
 
         public int MaxMouseSensitivity { get; }
         public int MouseSensitivity { get; set; }
+        public bool AlwaysRun { get; set; }
     }
 }

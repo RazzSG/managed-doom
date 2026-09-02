@@ -47,6 +47,13 @@ namespace ManagedDoom
         public int video_gamescreensize;
         public int video_gammacorrection;
         public int video_fpsscale;
+        
+        public bool video_crosshair;
+        public int video_crosshair_type;
+        public int video_crosshair_size;
+        public int video_crosshair_thickness;
+        public bool video_crosshair_targethealthcolor;
+        public int video_crosshair_color;
 
         public int audio_soundvolume;
         public int audio_musicvolume;
@@ -136,6 +143,13 @@ namespace ManagedDoom
             video_displaymessage = true;
             video_gammacorrection = 2;
             video_fpsscale = 2;
+            
+            video_crosshair = false;
+            video_crosshair_type = 0;
+            video_crosshair_size = 3;
+            video_crosshair_thickness = 2;
+            video_crosshair_targethealthcolor = false;
+            video_crosshair_color = 0;
 
             audio_soundvolume = 8;
             audio_musicvolume = 8;
@@ -186,6 +200,13 @@ namespace ManagedDoom
                 video_gamescreensize = GetInt(dic, nameof(video_gamescreensize), video_gamescreensize);
                 video_gammacorrection = GetInt(dic, nameof(video_gammacorrection), video_gammacorrection);
                 video_fpsscale = GetInt(dic, nameof(video_fpsscale), video_fpsscale);
+                
+                video_crosshair = GetBool(dic, nameof(video_crosshair), video_crosshair);
+                video_crosshair_type = GetInt(dic, nameof(video_crosshair_type), video_crosshair_type);
+                video_crosshair_size = GetInt(dic, nameof(video_crosshair_size), video_crosshair_size);
+                video_crosshair_thickness = GetInt(dic, nameof(video_crosshair_thickness), video_crosshair_thickness);
+                video_crosshair_targethealthcolor = GetBool(dic, nameof(video_crosshair_targethealthcolor), video_crosshair_targethealthcolor);
+                video_crosshair_color = GetInt(dic, nameof(video_crosshair_color), video_crosshair_color);
 
                 audio_soundvolume = GetInt(dic, nameof(audio_soundvolume), audio_soundvolume);
                 audio_musicvolume = GetInt(dic, nameof(audio_musicvolume), audio_musicvolume);
@@ -234,6 +255,13 @@ namespace ManagedDoom
                     writer.WriteLine(nameof(video_gammacorrection) + " = " + video_gammacorrection);
                     writer.WriteLine(nameof(video_fpsscale) + " = " + video_fpsscale);
 
+                    writer.WriteLine(nameof(video_crosshair) + " = " + BoolToString(video_crosshair));
+                    writer.WriteLine(nameof(video_crosshair_type) + " = " + video_crosshair_type);
+                    writer.WriteLine(nameof(video_crosshair_size) + " = " + video_crosshair_size);
+                    writer.WriteLine(nameof(video_crosshair_thickness) + " = " + video_crosshair_thickness);
+                    writer.WriteLine(nameof(video_crosshair_targethealthcolor) + " = " + BoolToString(video_crosshair_targethealthcolor));
+                    writer.WriteLine(nameof(video_crosshair_color) + " = " + video_crosshair_color);
+                    
                     writer.WriteLine(nameof(audio_soundvolume) + " = " + audio_soundvolume);
                     writer.WriteLine(nameof(audio_musicvolume) + " = " + audio_musicvolume);
                     writer.WriteLine(nameof(audio_randompitch) + " = " + BoolToString(audio_randompitch));

@@ -1311,7 +1311,7 @@ namespace ManagedDoom
 
             var fog = world.ThingAllocation.SpawnMobj(
                 actor.Target.X,
-                actor.Target.X,
+                actor.Target.Y,
                 actor.Target.Z,
                 MobjType.Fire);
 

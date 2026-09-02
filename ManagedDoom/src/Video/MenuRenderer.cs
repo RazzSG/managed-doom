@@ -156,10 +156,34 @@ namespace ManagedDoom.Video
                 DrawToggleMenuItem(toggle);
             }
 
+            var textToggle = item as TextToggleMenuItem;
+            if (textToggle != null)
+            {
+                DrawTextToggleMenuItem(textToggle);
+            }
+
+            var choice = item as ChoiceMenuItem;
+            if (choice != null)
+            {
+                DrawChoiceMenuItem(choice);
+            }
+
             var slider = item as SliderMenuItem;
             if (slider != null)
             {
                 DrawSliderMenuItem(slider);
+            }
+
+            var textSlider = item as TextSliderMenuItem;
+            if (textSlider != null)
+            {
+                DrawTextSliderMenuItem(textSlider);
+            }
+
+            var textItem = item as TextMenuItem;
+            if (textItem != null)
+            {
+                DrawTextMenuItem(textItem);
             }
 
             var textBox = item as TextBoxMenuItem;
@@ -274,6 +298,33 @@ namespace ManagedDoom.Video
                     DrawMenuPatch(skull, 248, 180);
                 }
             }
+        }
+        
+        private void DrawChoiceMenuItem(ChoiceMenuItem item)
+        {
+            DrawMenuText(item.Name.ToCharArray(), item.ItemX, item.ItemY);
+            DrawMenuText(item.State.ToCharArray(), item.StateX, item.ItemY);
+        }
+        
+        private void DrawTextSliderMenuItem(TextSliderMenuItem item)
+        {
+            DrawMenuText(item.Name.ToCharArray(), item.ItemX, item.ItemY);
+
+            var value = (item.SliderPosition + 1).ToString();
+
+            DrawMenuText(value.ToCharArray(), 215, item.ItemY);
+        }
+        
+        private void DrawTextMenuItem(TextMenuItem item)
+        {
+            DrawMenuText(item.Name.ToCharArray(), item.ItemX, item.ItemY);
+        }
+        
+        private void DrawTextToggleMenuItem(TextToggleMenuItem item)
+        {
+            DrawMenuText(item.Name.ToCharArray(), item.ItemX, item.ItemY);
+
+            DrawMenuText(item.State.ToCharArray(), item.StateX, item.ItemY);
         }
     }
 }

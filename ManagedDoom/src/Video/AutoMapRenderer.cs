@@ -104,6 +104,10 @@ namespace ManagedDoom.Video
         private float renderViewY;
 
         private Patch[] markNumbers;
+        
+        private readonly int statsX = 1;
+        private readonly int statsY = 8;
+        private readonly int statsLineHeight = 8;
 
         public AutoMapRenderer(Wad wad, DrawScreen screen)
         {
@@ -241,6 +245,10 @@ namespace ManagedDoom.Video
                 0,
                 amHeight - scale,
                 scale);
+            
+            screen.DrawText($"KILLS {player.KillCount}/{world.TotalKills}", scale * statsX, scale * statsY, scale);
+
+            screen.DrawText($"SECRETS {player.SecretCount}/{world.TotalSecrets}", scale * statsX, scale * (statsY + statsLineHeight), scale);
         }
 
         private void DrawPlayers(World world)

@@ -57,6 +57,9 @@ namespace ManagedDoom.Video
         private int wipeBandCount;
         private int wipeHeight;
         private byte[] wipeBuffer;
+        
+        private Hitscan crosshairHitscan;
+        private World crosshairWorld;
 
         public Renderer(Config config, GameContent content)
         {
@@ -66,11 +69,11 @@ namespace ManagedDoom.Video
 
             if (config.video_highresolution)
             {
-                screen = new DrawScreen(content.Wad, 640, 400);
+                screen = new DrawScreen(content.Wad, 1280, 800);
             }
             else
             {
-                screen = new DrawScreen(content.Wad, 320, 200);
+                screen = new DrawScreen(content.Wad, 640, 400);
             }
 
             config.video_gamescreensize = Math.Clamp(config.video_gamescreensize, 0, MaxWindowSize);
@@ -154,6 +157,7 @@ namespace ManagedDoom.Video
                 else
                 {
                     threeD.Render(displayPlayer, frameFrac);
+                    DrawCrosshair(consolePlayer);
                     if (threeD.WindowSize < 8)
                     {
                         statusBar.Render(consolePlayer, true);
@@ -311,6 +315,322 @@ namespace ManagedDoom.Video
 
             return palette;
         }
+        
+        private void DrawCrosshair(Player player)
+        {
+            if (!config.video_crosshair)
+            {
+                return;
+            }
+
+            var x = threeD.WindowCenterX;
+            var y = threeD.WindowCenterY;
+
+            var size = Math.Clamp(config.video_crosshair_size, 1, 7);
+            var thickness = Math.Clamp(config.video_crosshair_thickness, 1, 3);
+            var color = config.video_crosshair_targethealthcolor ? GetCrosshairHealthColor(player) : GetCrosshairColor(config.video_crosshair_color);
+
+            switch (config.video_crosshair_type)
+            {
+                case 0:
+                    DrawCrosshairCross(x, y, size, thickness, color);
+                    break;
+
+                case 1:
+                    DrawCrosshairSmallCross(x, y, size, thickness, color);
+                    break;
+
+                case 2:
+                    DrawCrosshairDot(x, y, size, color);
+                    break;
+
+                case 3:
+                    DrawCrosshairCircle(x, y, size, thickness, color);
+                    break;
+            }
+        }
+        
+        private void DrawCrosshairCross(int x, int y, int size, int thickness, int color)
+        {
+            size = Math.Clamp(size, 1, 7);
+            thickness = Math.Clamp(thickness, 1, 3);
+
+            var halfThickness = thickness / 2;
+
+            var leftX = x - size - 1;
+            var rightX = x + 2;
+
+            var topY = y - size - 1;
+            var bottomY = y + 2;
+
+            screen.FillRect(leftX, y - halfThickness, size, thickness, color);
+            screen.FillRect(rightX, y - halfThickness, size, thickness, color);
+            screen.FillRect(x - halfThickness, topY, thickness, size, color);
+            screen.FillRect(x - halfThickness, bottomY, thickness, size, color);
+        }
+
+        private void DrawCrosshairDot(int x, int y, int size, int color)
+        {
+            size = Math.Clamp(size, 1, 7);
+
+            var offset = size / 2;
+
+            screen.FillRect(x - offset, y - offset, size, size, color);
+        }
+
+        private void DrawCrosshairSmallCross(int x, int y, int size, int thickness, int color)
+        {
+            size = Math.Clamp(size, 1, 7);
+            thickness = Math.Clamp(thickness, 1, 3);
+
+            var left = x - size;
+            var top = y - size;
+            var totalSize = size * 2 + 1;
+
+            screen.FillRect(left, y - thickness / 2, totalSize, thickness, color);
+
+            screen.FillRect(x - thickness / 2, top, thickness, totalSize, color);
+        }
+
+        private void DrawCrosshairCircle(int x, int y, int size, int thickness, int color)
+        {
+            size = Math.Clamp(size, 1, 7);
+            thickness = Math.Clamp(thickness, 1, 3);
+
+            var radius = size;
+
+            for (var offset = 0; offset < thickness; offset++)
+            {
+                DrawCrosshairCircleLine(x, y, radius + offset - thickness / 2, color);
+            }
+        }
+        
+        private void DrawCrosshairCircleLine(int x, int y, int radius, int color)
+        {
+            radius = Math.Max(1, radius);
+
+            const int segments = 32;
+
+            var previousX = x + radius;
+            var previousY = y;
+
+            for (var i = 1; i <= segments; i++)
+            {
+                var angle = MathF.PI * 2.0F * i / segments;
+
+                var currentX = x + (int)MathF.Round(MathF.Cos(angle) * radius);
+
+                var currentY = y + (int)MathF.Round(MathF.Sin(angle) * radius);
+
+                screen.DrawLine(previousX, previousY, currentX, currentY, color);
+
+                previousX = currentX;
+                previousY = currentY;
+            }
+        }
+
+        private int GetCrosshairColor(int color)
+        {
+            color = Math.Clamp(color, 0, 6);
+
+            byte targetR;
+            byte targetG;
+            byte targetB;
+
+            switch (color)
+            {
+                case 1:
+                    targetR = 255;
+                    targetG = 0;
+                    targetB = 0;
+                    break;
+
+                case 2:
+                    targetR = 0;
+                    targetG = 255;
+                    targetB = 0;
+                    break;
+
+                case 3:
+                    targetR = 0;
+                    targetG = 0;
+                    targetB = 255;
+                    break;
+
+                case 4:
+                    targetR = 255;
+                    targetG = 255;
+                    targetB = 0;
+                    break;
+
+                case 5:
+                    targetR = 0;
+                    targetG = 255;
+                    targetB = 255;
+                    break;
+
+                case 6:
+                    targetR = 255;
+                    targetG = 0;
+                    targetB = 255;
+                    break;
+
+                default:
+                    targetR = 255;
+                    targetG = 255;
+                    targetB = 255;
+                    break;
+            }
+
+            var colors = palette[0];
+
+            var bestIndex = 0;
+            var bestDistance = ulong.MaxValue;
+
+            for (var i = 0; i < colors.Length; i++)
+            {
+                var current = colors[i];
+
+                var r = (byte)(current & 0xFF);
+                var g = (byte)((current >> 8) & 0xFF);
+                var b = (byte)((current >> 16) & 0xFF);
+
+                var dr = r - targetR;
+                var dg = g - targetG;
+                var db = b - targetB;
+
+                var distance = (ulong)(dr * dr + dg * dg + db * db);
+
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    bestIndex = i;
+                }
+            }
+
+            return bestIndex;
+        }
+        
+        private Hitscan GetCrosshairHitscan(World world)
+        {
+            if (!ReferenceEquals(crosshairWorld, world))
+            {
+                crosshairWorld = world;
+                crosshairHitscan = new Hitscan(world);
+            }
+
+            return crosshairHitscan;
+        }
+        
+        private Mobj GetCrosshairTarget(Player player)
+        {
+            if (player?.Mobj == null)
+            {
+                return null;
+            }
+
+            var hitscan = GetCrosshairHitscan(player.Mobj.World);
+            var range = Fixed.FromInt(2048);
+            hitscan.AimLineAttack(player.Mobj, player.Mobj.Angle, range);
+            var target = hitscan.LineTarget;
+
+            if (target == null)
+            {
+                return null;
+            }
+
+            if (target.Health <= 0)
+            {
+                return null;
+            }
+
+            if ((target.Flags & MobjFlags.CountKill) == 0)
+            {
+                return null;
+            }
+
+            if (target.Info is not {SpawnHealth: > 0})
+            {
+                return null;
+            }
+
+            return target;
+        }
+        
+        private int GetCrosshairHealthColor(Player player)
+        {
+            var target = GetCrosshairTarget(player);
+
+            float healthPercent = 1.0f;
+
+            if (target != null)
+            {
+                var maxHealth = target.Info.SpawnHealth;
+
+                if (maxHealth > 0)
+                {
+                    var health = Math.Clamp(target.Health, 0, maxHealth);
+                    healthPercent = health / (float)maxHealth;
+                }
+            }
+
+            byte r;
+            byte g;
+
+            if (healthPercent >= 0.5f)
+            {
+                var t = (1.0f - healthPercent) * 2.0f;
+
+                r = LerpByte(0, 255, t);
+                g = 255;
+            }
+            else
+            {
+                var t = healthPercent * 2.0f;
+
+                r = 255;
+                g = LerpByte(0, 255, t);
+            }
+
+            return FindNearestPaletteColor(r, g, 0);
+        }
+        
+        private int FindNearestPaletteColor(byte targetR, byte targetG, byte targetB)
+        {
+            var colors = palette[0];
+
+            var bestIndex = 0;
+            var bestDistance = ulong.MaxValue;
+
+            for (var i = 0; i < colors.Length; i++)
+            {
+                var current = colors[i];
+
+                var r = (byte)(current & 0xFF);
+                var g = (byte)((current >> 8) & 0xFF);
+                var b = (byte)((current >> 16) & 0xFF);
+
+                var dr = r - targetR;
+                var dg = g - targetG;
+                var db = b - targetB;
+
+                var distance = (ulong)(dr * dr + dg * dg + db * db);
+
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    bestIndex = i;
+                }
+            }
+
+            return bestIndex;
+        }
+        
+        private static byte LerpByte(byte a, byte b, float t)
+        {
+            t = Math.Clamp(t, 0.0f, 1.0f);
+            return (byte)Math.Clamp((int)MathF.Round(a + (b - a) * t), 0, 255);
+        }
 
         public int Width => screen.Width;
         public int Height => screen.Height;
@@ -350,6 +670,84 @@ namespace ManagedDoom.Video
             set
             {
                 config.video_displaymessage = value;
+            }
+        }
+        
+        public bool Crosshair
+        {
+            get
+            {
+                return config.video_crosshair;
+            }
+
+            set
+            {
+                config.video_crosshair = value;
+            }
+        }
+
+        public int CrosshairType
+        {
+            get
+            {
+                return config.video_crosshair_type;
+            }
+
+            set
+            {
+                config.video_crosshair_type = Math.Clamp(value, 0, 3);
+            }
+        }
+
+        public int CrosshairSize
+        {
+            get
+            {
+                return config.video_crosshair_size;
+            }
+
+            set
+            {
+                config.video_crosshair_size = Math.Clamp(value, 1, 7);
+            }
+        }
+        
+        public int CrosshairThickness
+        {
+            get
+            {
+                return config.video_crosshair_thickness;
+            }
+
+            set
+            {
+                config.video_crosshair_thickness = Math.Clamp(value, 1, 3);
+            }
+        }
+        
+        public bool CrosshairTargetHealthColor
+        {
+            get
+            {
+                return config.video_crosshair_targethealthcolor;
+            }
+
+            set
+            {
+                config.video_crosshair_targethealthcolor = value;
+            }
+        }
+
+        public int CrosshairColor
+        {
+            get
+            {
+                return config.video_crosshair_color;
+            }
+
+            set
+            {
+                config.video_crosshair_color = Math.Clamp(value, 0, 6);
             }
         }
 

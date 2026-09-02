@@ -1,8 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
+<!--    <OutputType>Exe</OutputType>-->
+    <TargetFramework>net8.0</TargetFramework>
     <AssemblyName>managed-doom</AssemblyName>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
 
@@ -25,4 +25,25 @@
     <PackageReference Include="TrippyGL" Version="1.2.2" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="src\Silk\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Remove="src\Silk\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="src\Silk\**" />
+  </ItemGroup>
+
+    <Target Name="CopyDllToMod" AfterTargets="Build">
+        <Message Text="Копирование DLL в папку мода Terraria..." Importance="high" />
+        <Copy
+                SourceFiles="$(TargetDir)$(TargetFileName)"
+                DestinationFolder="C:\Users\Yum\Documents\My Games\Terraria\tModLoader\ModSources\DoomInTerraria\lib\"
+                OverwriteReadOnlyFiles="true"
+        />
+    </Target>
+    
 </Project>

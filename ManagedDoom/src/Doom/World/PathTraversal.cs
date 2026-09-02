@@ -38,7 +38,7 @@ namespace ManagedDoom
         {
             this.world = world;
 
-            intercepts = new Intercept[256];
+            intercepts = new Intercept[65536];
             for (var i = 0; i < intercepts.Length; i++)
             {
                 intercepts[i] = new Intercept();

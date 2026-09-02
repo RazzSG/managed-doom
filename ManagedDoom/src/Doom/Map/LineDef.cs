@@ -16,6 +16,7 @@
 
 
 using System;
+using System.Buffers.Binary;
 
 namespace ManagedDoom
 {
@@ -99,15 +100,15 @@ namespace ManagedDoom
             backSector = backSide?.Sector;
         }
 
-        public static LineDef FromData(byte[] data, int offset, Vertex[] vertices, SideDef[] sides)
+        public static LineDef FromData(ReadOnlySpan<byte> data, int number, Vertex[] vertices, SideDef[] sides)
         {
-            var vertex1Number = BitConverter.ToInt16(data, offset);
-            var vertex2Number = BitConverter.ToInt16(data, offset + 2);
-            var flags = BitConverter.ToInt16(data, offset + 4);
-            var special = BitConverter.ToInt16(data, offset + 6);
-            var tag = BitConverter.ToInt16(data, offset + 8);
-            var side0Number = BitConverter.ToInt16(data, offset + 10);
-            var side1Number = BitConverter.ToInt16(data, offset + 12);
+            var vertex1Number = BinaryPrimitives.ReadUInt16LittleEndian(data.Slice(0, 2));
+            var vertex2Number = BinaryPrimitives.ReadUInt16LittleEndian(data.Slice(2, 2));
+            var flags = BinaryPrimitives.ReadInt16LittleEndian(data.Slice(4, 2));
+            var special = BinaryPrimitives.ReadInt16LittleEndian(data.Slice(6, 2));
+            var tag = BinaryPrimitives.ReadInt16LittleEndian(data.Slice(8, 2));
+            var side0Number = BinaryPrimitives.ReadUInt16LittleEndian(data.Slice(10, 2));
+            var side1Number = BinaryPrimitives.ReadUInt16LittleEndian(data.Slice(12, 2));
 
             return new LineDef(
                 vertices[vertex1Number],
@@ -116,25 +117,24 @@ namespace ManagedDoom
                 (LineSpecial)special,
                 tag,
                 sides[side0Number],
-                side1Number != -1 ? sides[side1Number] : null);
+                side1Number != 0xFFFF ? sides[side1Number] : null);
         }
 
         public static LineDef[] FromWad(Wad wad, int lump, Vertex[] vertices, SideDef[] sides)
         {
-            var length = wad.GetLumpSize(lump);
-            if (length % dataSize != 0)
+            var data = wad.ReadLump(lump);
+            if (data.Length % dataSize != 0)
             {
                 throw new Exception();
             }
 
-            var data = wad.ReadLump(lump);
-            var count = length / dataSize;
-            var lines = new LineDef[count]; ;
+            var count = data.Length / dataSize;
+            var lines = new LineDef[count];
+            ReadOnlySpan<byte> span = data;
 
             for (var i = 0; i < count; i++)
             {
-                var offset = 14 * i;
-                lines[i] = FromData(data, offset, vertices, sides);
+                lines[i] = FromData(span.Slice(i * dataSize, dataSize), i, vertices, sides);
             }
 
             return lines;

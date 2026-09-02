@@ -28,7 +28,7 @@ namespace ManagedDoom
         public static readonly int DescriptionSize = 24;
 
         private static readonly int versionSize = 16;
-        private static readonly int saveBufferSize = 360 * 1024;
+        private static readonly int saveBufferSize = 16 * 1024 * 1024;
 
         private enum ThinkerClass
         {

@@ -416,6 +416,7 @@ namespace ManagedDoom
                 case 9:
                     // Secret sector.
                     player.SecretCount++;
+                    player.SendMessage("A secret is revealed!");
                     sector.Special = 0;
                     break;
 

@@ -36,8 +36,8 @@ namespace ManagedDoom
 
         public static Subsector FromData(byte[] data, int offset, Seg[] segs)
         {
-            var segCount = BitConverter.ToInt16(data, offset);
-            var firstSegNumber = BitConverter.ToInt16(data, offset + 2);
+            var segCount = BitConverter.ToUInt16(data, offset);
+            var firstSegNumber = BitConverter.ToUInt16(data, offset + 2);
 
             return new Subsector(
                 segs[firstSegNumber].SideDef.Sector,

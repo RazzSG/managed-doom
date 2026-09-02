@@ -29,6 +29,13 @@ namespace ManagedDoom.Video
         public int WindowSize { get; set; }
 
         public bool DisplayMessage { get; set; }
+        
+        public bool Crosshair { get; set; }
+        public int CrosshairType { get; set; }
+        public int CrosshairSize { get; set; }
+        public int CrosshairThickness { get; set; }
+        public bool CrosshairTargetHealthColor { get; set; }
+        public int CrosshairColor { get; set; }
 
         public int MaxGammaCorrectionLevel { get; }
         public int GammaCorrectionLevel { get; set; }

@@ -39,8 +39,8 @@ namespace ManagedDoom.Silk
 
                 if (config.video_highresolution)
                 {
-                    textureWidth = 512;
-                    textureHeight = 1024;
+                    textureWidth = config.video_screenwidth;
+                    textureHeight = config.video_screenheight;
                 }
                 else
                 {

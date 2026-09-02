@@ -69,5 +69,17 @@ namespace ManagedDoom.UserInput
             {
             }
         }
+
+        public bool AlwaysRun
+        {
+            get
+            {
+                return true;
+            }
+
+            set
+            {
+            }
+        }
     }
 }

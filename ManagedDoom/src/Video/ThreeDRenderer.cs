@@ -445,15 +445,15 @@ namespace ManagedDoom.Video
             upperClip = new short[screenWidth];
             lowerClip = new short[screenWidth];
 
-            clipRanges = new ClipRange[256];
+            clipRanges = new ClipRange[65536];
             for (var i = 0; i < clipRanges.Length; i++)
             {
                 clipRanges[i] = new ClipRange();
             }
 
-            clipData = new short[128 * screenWidth];
+            clipData = new short[1024 * screenWidth];
 
-            visWallRanges = new VisWallRange[512];
+            visWallRanges = new VisWallRange[65536];
             for (var i = 0; i < visWallRanges.Length; i++)
             {
                 visWallRanges[i] = new VisWallRange();
@@ -512,7 +512,7 @@ namespace ManagedDoom.Video
 
         private void InitSpriteRendering()
         {
-            visSprites = new VisSprite[256];
+            visSprites = new VisSprite[65536];
             for (var i = 0; i < visSprites.Length; i++)
             {
                 visSprites[i] = new VisSprite();
@@ -2968,6 +2968,9 @@ namespace ManagedDoom.Video
                 SetWindowSize(windowSize);
             }
         }
+        
+        public int WindowCenterX => windowX + centerX;
+        public int WindowCenterY => windowY + centerY;
 
 
 

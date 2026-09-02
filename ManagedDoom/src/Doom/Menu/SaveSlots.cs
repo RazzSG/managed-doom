@@ -20,6 +20,23 @@ using System.IO;
 
 namespace ManagedDoom
 {
+    public static class DoomSaveConfig
+    {
+        public static string CurrentSaveDir { get; set; } = "";
+
+        public static string GetSaveFilePath(int slot)
+        {
+            string dir = string.IsNullOrEmpty(CurrentSaveDir) ? ConfigUtilities.GetExeDirectory() : CurrentSaveDir;
+
+            if (!Directory.Exists(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+
+            return Path.Combine(dir, "doomsav" + slot + ".dsg");
+        }
+    }
+    
     public sealed class SaveSlots
     {
         private static readonly int slotCount = 6;
@@ -30,19 +47,16 @@ namespace ManagedDoom
         private void ReadSlots()
         {
             slots = new string[slotCount];
-
-            var directory = ConfigUtilities.GetExeDirectory();
             var buffer = new byte[descriptionSize];
             for (var i = 0; i < slots.Length; i++)
             {
-                var path = Path.Combine(directory, "doomsav" + i + ".dsg");
+                var path = DoomSaveConfig.GetSaveFilePath(i);
+                
                 if (File.Exists(path))
                 {
-                    using (var reader = new FileStream(path, FileMode.Open, FileAccess.Read))
-                    {
-                        reader.ReadExactly(buffer);
-                        slots[i] = DoomInterop.ToString(buffer, 0, buffer.Length);
-                    }
+                    using var reader = new FileStream(path, FileMode.Open, FileAccess.Read);
+                    reader.ReadExactly(buffer);
+                    slots[i] = DoomInterop.ToString(buffer, 0, buffer.Length);
                 }
             }
         }

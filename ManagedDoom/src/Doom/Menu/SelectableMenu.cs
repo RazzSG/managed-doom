@@ -26,6 +26,8 @@ namespace ManagedDoom
         private int[] titleX;
         private int[] titleY;
         private MenuItem[] items;
+        
+        private MenuDef parent;
 
         private int index;
         private MenuItem choice;
@@ -73,10 +75,28 @@ namespace ManagedDoom
                     toggle.Reset();
                 }
 
+                var textToggle = item as TextToggleMenuItem;
+                if (textToggle != null)
+                {
+                    textToggle.Reset();
+                }
+
                 var slider = item as SliderMenuItem;
                 if (slider != null)
                 {
                     slider.Reset();
+                }
+
+                var textSlider = item as TextSliderMenuItem;
+                if (textSlider != null)
+                {
+                    textSlider.Reset();
+                }
+
+                var choice = item as ChoiceMenuItem;
+                if (choice != null)
+                {
+                    choice.Reset();
                 }
             }
         }
@@ -133,69 +153,135 @@ namespace ManagedDoom
             {
                 Up();
                 Menu.StartSound(Sfx.PSTOP);
+                return true;
             }
 
             if (e.Key == DoomKey.Down)
             {
                 Down();
                 Menu.StartSound(Sfx.PSTOP);
+                return true;
             }
 
             if (e.Key == DoomKey.Left)
             {
-                var toggle = choice as ToggleMenuItem;
-                if (toggle != null)
+                var toggleItem = choice as ToggleMenuItem;
+                if (toggleItem != null)
                 {
-                    toggle.Down();
+                    toggleItem.Down();
+                    Menu.StartSound(Sfx.PISTOL);
+                    return true;
+                }
+
+                var textToggleItem = choice as TextToggleMenuItem;
+                if (textToggleItem != null)
+                {
+                    textToggleItem.Down();
+                    Menu.StartSound(Sfx.PISTOL);
+                    return true;
+                }
+
+                var sliderItem = choice as SliderMenuItem;
+                if (sliderItem != null)
+                {
+                    sliderItem.Down();
+                    Menu.StartSound(Sfx.STNMOV);
+                    return true;
+                }
+
+                var textSliderItem = choice as TextSliderMenuItem;
+                if (textSliderItem != null)
+                {
+                    textSliderItem.Down();
+                    Menu.StartSound(Sfx.STNMOV);
+                    return true;
+                }
+
+                var choiceItem = choice as ChoiceMenuItem;
+                if (choiceItem != null)
+                {
+                    choiceItem.Down();
                     Menu.StartSound(Sfx.PISTOL);
                 }
 
-                var slider = choice as SliderMenuItem;
-                if (slider != null)
-                {
-                    slider.Down();
-                    Menu.StartSound(Sfx.STNMOV);
-                }
+                return true;
             }
 
             if (e.Key == DoomKey.Right)
             {
-                var toggle = choice as ToggleMenuItem;
-                if (toggle != null)
+                var toggleItem = choice as ToggleMenuItem;
+                if (toggleItem != null)
                 {
-                    toggle.Up();
+                    toggleItem.Up();
+                    Menu.StartSound(Sfx.PISTOL);
+                    return true;
+                }
+
+                var textToggleItem = choice as TextToggleMenuItem;
+                if (textToggleItem != null)
+                {
+                    textToggleItem.Up();
+                    Menu.StartSound(Sfx.PISTOL);
+                    return true;
+                }
+
+                var sliderItem = choice as SliderMenuItem;
+                if (sliderItem != null)
+                {
+                    sliderItem.Up();
+                    Menu.StartSound(Sfx.STNMOV);
+                    return true;
+                }
+
+                var textSliderItem = choice as TextSliderMenuItem;
+                if (textSliderItem != null)
+                {
+                    textSliderItem.Up();
+                    Menu.StartSound(Sfx.STNMOV);
+                    return true;
+                }
+
+                var choiceItem = choice as ChoiceMenuItem;
+                if (choiceItem != null)
+                {
+                    choiceItem.Up();
                     Menu.StartSound(Sfx.PISTOL);
                 }
 
-                var slider = choice as SliderMenuItem;
-                if (slider != null)
-                {
-                    slider.Up();
-                    Menu.StartSound(Sfx.STNMOV);
-                }
+                return true;
             }
 
             if (e.Key == DoomKey.Enter)
             {
-                var toggle = choice as ToggleMenuItem;
-                if (toggle != null)
+                var toggleItem = choice as ToggleMenuItem;
+                if (toggleItem != null)
                 {
-                    toggle.Up();
+                    toggleItem.Up();
                     Menu.StartSound(Sfx.PISTOL);
+                    return true;
                 }
 
-                var simple = choice as SimpleMenuItem;
-                if (simple != null)
+                var textToggleItem = choice as TextToggleMenuItem;
+                if (textToggleItem != null)
                 {
-                    if (simple.Selectable)
+                    textToggleItem.Up();
+                    Menu.StartSound(Sfx.PISTOL);
+                    return true;
+                }
+
+                var simpleItem = choice as SimpleMenuItem;
+                if (simpleItem != null)
+                {
+                    if (simpleItem.Selectable)
                     {
-                        if (simple.Action != null)
+                        if (simpleItem.Action != null)
                         {
-                            simple.Action();
+                            simpleItem.Action();
                         }
-                        if (simple.Next != null)
+
+                        if (simpleItem.Next != null)
                         {
-                            Menu.SetCurrent(simple.Next);
+                            Menu.SetCurrent(simpleItem.Next);
                         }
                         else
                         {
@@ -211,12 +297,21 @@ namespace ManagedDoom
                     Menu.SetCurrent(choice.Next);
                     Menu.StartSound(Sfx.PISTOL);
                 }
+                return true;
             }
 
             if (e.Key == DoomKey.Escape)
             {
-                Menu.Close();
-                Menu.StartSound(Sfx.SWTCHX);
+                if (Parent != null)
+                {
+                    Menu.SetCurrent(Parent);
+                    Menu.StartSound(Sfx.PISTOL);
+                }
+                else
+                {
+                    Menu.Close();
+                    Menu.StartSound(Sfx.SWTCHX);
+                }
             }
 
             return true;
@@ -227,5 +322,11 @@ namespace ManagedDoom
         public IReadOnlyList<int> TitleY => titleY;
         public IReadOnlyList<MenuItem> Items => items;
         public MenuItem Choice => choice;
+        
+        public MenuDef Parent
+        {
+            get => parent;
+            set => parent = value;
+        }
     }
 }
