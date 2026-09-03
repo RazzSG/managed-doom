@@ -79,13 +79,19 @@ namespace ManagedDoom
                     throw new Exception("Map '" + name + "' was not found!");
                 }
 
+                MapFormatDetector.EnsureDoomBinary(wad, map);
+
                 vertices = Vertex.FromWad(wad, map + 4);
                 sectors = Sector.FromWad(wad, map + 8, flats);
                 sides = SideDef.FromWad(wad, map + 3, textures, sectors);
                 lines = LineDef.FromWad(wad, map + 2, vertices, sides);
-                segs = Seg.FromWad(wad, map + 5, vertices, lines);
-                subsectors = Subsector.FromWad(wad, map + 6, segs);
-                nodes = Node.FromWad(wad, map + 7, subsectors);
+                
+                var nodeData = MapNodeLoader.Load(wad, map, vertices, lines);
+                vertices = nodeData.Vertices;
+                segs = nodeData.Segs;
+                subsectors = nodeData.Subsectors;
+                nodes = nodeData.Nodes;
+                
                 things = MapThing.FromWad(wad, map + 1);
                 blockMap = BlockMap.FromWad(wad, map + 10, lines);
                 reject = Reject.FromWad(wad, map + 9, sectors);
@@ -94,25 +100,7 @@ namespace ManagedDoom
 
                 skyTexture = GetSkyTextureByMapName(name);
 
-                if (options.GameMode == GameMode.Commercial)
-                {
-                    switch (options.MissionPack)
-                    {
-                        case MissionPack.Plutonia:
-                            title = DoomInfo.MapTitles.Plutonia[options.Map - 1];
-                            break;
-                        case MissionPack.Tnt:
-                            title = DoomInfo.MapTitles.Tnt[options.Map - 1];
-                            break;
-                        default:
-                            title = DoomInfo.MapTitles.Doom2[options.Map - 1];
-                            break;
-                    }
-                }
-                else
-                {
-                    title = DoomInfo.MapTitles.Doom[options.Episode - 1][options.Map - 1];
-                }
+                title = GetMapTitle(name, options);
 
                 Console.WriteLine("OK");
             }
@@ -162,26 +150,52 @@ namespace ManagedDoom
                 sector.SoundOrigin.Y = (boundingBox[Box.Top] + boundingBox[Box.Bottom]) / 2;
 
                 sector.BlockBox = new int[4];
-                int block;
 
-                // Adjust bounding box to map blocks.
-                block = (boundingBox[Box.Top] - blockMap.OriginY + GameConst.MaxThingRadius).Data >> BlockMap.FracToBlockShift;
-                block = block >= blockMap.Height ? blockMap.Height - 1 : block;
-                sector.BlockBox[Box.Top] = block;
+                // Adjust bounding box to map blocks. BlockMap performs the coordinate
+                // arithmetic in 64-bit precision, so large-map subtraction cannot overflow Fixed.
+                sector.BlockBox[Box.Top] = Math.Clamp(blockMap.GetBlockY(boundingBox[Box.Top], GameConst.MaxThingRadius), 0, blockMap.Height - 1);
 
-                block = (boundingBox[Box.Bottom] - blockMap.OriginY - GameConst.MaxThingRadius).Data >> BlockMap.FracToBlockShift;
-                block = block < 0 ? 0 : block;
-                sector.BlockBox[Box.Bottom] = block;
+                sector.BlockBox[Box.Bottom] = Math.Clamp(blockMap.GetBlockY(boundingBox[Box.Bottom], -GameConst.MaxThingRadius), 0, blockMap.Height - 1);
 
-                block = (boundingBox[Box.Right] - blockMap.OriginX + GameConst.MaxThingRadius).Data >> BlockMap.FracToBlockShift;
-                block = block >= blockMap.Width ? blockMap.Width - 1 : block;
-                sector.BlockBox[Box.Right] = block;
+                sector.BlockBox[Box.Right] = Math.Clamp(blockMap.GetBlockX(boundingBox[Box.Right], GameConst.MaxThingRadius), 0, blockMap.Width - 1);
 
-                block = (boundingBox[Box.Left] - blockMap.OriginX - GameConst.MaxThingRadius).Data >> BlockMap.FracToBlockShift;
-                block = block < 0 ? 0 : block;
-                sector.BlockBox[Box.Left] = block;
+                sector.BlockBox[Box.Left] = Math.Clamp(blockMap.GetBlockX(boundingBox[Box.Left], -GameConst.MaxThingRadius), 0, blockMap.Width - 1);
             }
         }
+
+        private static string GetMapTitle(string name, GameOptions options)
+        {
+            if (options.GameMode == GameMode.Commercial)
+            {
+                IReadOnlyList<DoomString> titles = options.MissionPack switch
+                {
+                    MissionPack.Plutonia => DoomInfo.MapTitles.Plutonia,
+                    MissionPack.Tnt => DoomInfo.MapTitles.Tnt,
+                    _ => DoomInfo.MapTitles.Doom2
+                };
+
+                var mapIndex = options.Map - 1;
+
+                return (uint)mapIndex < (uint)titles.Count ? titles[mapIndex] : name;
+            }
+
+            var episodeIndex = options.Episode - 1;
+
+            var mapIndexDoom = options.Map - 1;
+
+            if ((uint)episodeIndex < (uint)DoomInfo.MapTitles.Doom.Count)
+            {
+                var episodeTitles = DoomInfo.MapTitles.Doom[episodeIndex];
+
+                if ((uint)mapIndexDoom < (uint)episodeTitles.Count)
+                {
+                    return episodeTitles[mapIndexDoom];
+                }
+            }
+
+            return name;
+        }
+
 
         private Texture GetSkyTextureByMapName(string name)
         {

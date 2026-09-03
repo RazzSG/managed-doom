@@ -18,6 +18,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Runtime.ExceptionServices;
 
 namespace ManagedDoom
@@ -104,15 +105,7 @@ namespace ManagedDoom
                 return 0;
             }
 
-            int number;
-            if (nameToNumber.TryGetValue(name, out number))
-            {
-                return number;
-            }
-            else
-            {
-                return -1;
-            }
+            return nameToNumber.TryGetValue(name, out var number) ? number : -1;
         }
 
         private static Patch[] LoadPatches(Wad wad)
@@ -122,17 +115,88 @@ namespace ManagedDoom
             for (var i = 0; i < patches.Length; i++)
             {
                 var name = patchNames[i];
-
-                // This check is necessary to avoid crash in DOOM1.WAD.
-                if (wad.GetLumpNumber(name) == -1)
-                {
-                    continue;
-                }
-
-                var data = wad.ReadLump(name);
-                patches[i] = Patch.FromData(name, data);
+                patches[i] = FindAndLoadPatch(wad, name);
             }
+
             return patches;
+        }
+
+        private static Patch FindAndLoadPatch(Wad wad, string name)
+        {
+            var lumps = wad.LumpInfos;
+            Exception lastPatchError = null;
+            var foundSameName = false;
+
+            // Preserve vanilla Doom's lookup order: search the complete lump directory
+            // backwards. The important difference is that a same-name flat/sprite/etc.
+            // is ignored if it is not actually a valid Doom patch. This fixes modern
+            // WAD collisions such as a flat named BODIES without breaking Final Doom,
+            // whose PNAMES lookup relies on the original global-name behavior.
+            for (var i = lumps.Count - 1; i >= 0; i--)
+            {
+                if (!string.Equals(lumps[i].Name, name, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                foundSameName = true;
+
+                var data = wad.ReadLump(i);
+
+                if (!LooksLikeDoomPatchHeader(data))
+                    continue;
+
+                try
+                {
+                    return Patch.FromData(name, data);
+                }
+                catch (Exception e)
+                {
+                    // There may be an earlier lump with the same name that is the real
+                    // texture patch. Remember the parse error in case none is usable.
+                    lastPatchError = new InvalidDataException($"Invalid texture patch candidate '{name}' at lump {i}, size={data.Length}.", e);
+                }
+            }
+
+            // Missing PNAMES entries can legitimately be unused in old IWADs, so keep
+            // the original ManagedDoom behavior and leave those slots null.
+            // If a texture actually references a missing slot, Texture.FromData will
+            // expose it; a malformed patch candidate, however, is worth reporting.
+            if (lastPatchError != null)
+                throw lastPatchError;
+
+            if (foundSameName)
+            {
+                // Same-name lumps existed, but none were Doom patches. Treat the PNAMES
+                // entry as unresolved rather than accidentally parsing a flat/sprite.
+                return null;
+            }
+
+            return null;
+        }
+
+        private static bool LooksLikeDoomPatchHeader(byte[] data)
+        {
+            if (data == null || data.Length < 8)
+                return false;
+
+            var width = BitConverter.ToInt16(data, 0);
+            var height = BitConverter.ToInt16(data, 2);
+
+            if (width <= 0 || height <= 0)
+                return false;
+
+            var tableEnd = 8L + 4L * width;
+            if (tableEnd > data.Length)
+                return false;
+
+            for (var x = 0; x < width; x++)
+            {
+                var p = BitConverter.ToInt32(data, 8 + 4 * x);
+
+                if (p < tableEnd || p >= data.Length)
+                    return false;
+            }
+
+            return true;
         }
 
         private static string[] LoadPatchNames(Wad wad)

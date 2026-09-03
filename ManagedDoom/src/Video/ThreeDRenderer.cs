@@ -17,6 +17,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 
 namespace ManagedDoom.Video
 {
@@ -110,6 +111,15 @@ namespace ManagedDoom.Video
         private int windowY;
         private int windowWidth;
         private int windowHeight;
+        
+        private const int SpriteWallBucketShift = 4; // 16 screen pixels.
+        private const int SpriteWallBucketSize = 1 << SpriteWallBucketShift;
+        
+        private ulong[] spriteWallBucketBits = Array.Empty<ulong>();
+        private ulong[] spriteWallCandidateBits = Array.Empty<ulong>();
+        private int spriteWallBucketCount;
+        private int spriteWallWordCount;
+        
         private int centerX;
         private int centerY;
         private Fixed centerXFrac;
@@ -2602,6 +2612,8 @@ namespace ManagedDoom.Video
         {
             Array.Sort(visSprites, 0, visSpriteCount, visSpriteComparer);
 
+            BuildSpriteWallIndex();
+
             for (var i = visSpriteCount - 1; i >= 0; i--)
             {
                 DrawSprite(visSprites[i]);
@@ -2616,183 +2628,106 @@ namespace ManagedDoom.Video
                 upperClip[x] = -2;
             }
 
-            // Scan drawsegs from end to start for obscuring segs.
-            // The first drawseg that has a greater scale is the clip seg.
-            for (var i = visWallRangeCount - 1; i >= 0; i--)
+            if (spriteWallWordCount != 0)
             {
-                var wall = visWallRanges[i];
+                var firstBucket = sprite.X1 >> SpriteWallBucketShift;
 
-                // Determine if the drawseg obscures the sprite.
-                if (wall.X1 > sprite.X2 ||
-                    wall.X2 < sprite.X1 ||
-                    (wall.Silhouette == 0 && wall.MaskedTextureColumn == -1))
+                var lastBucket = sprite.X2 >> SpriteWallBucketShift;
+
+                if (firstBucket < 0)
+                    firstBucket = 0;
+
+                if (lastBucket >= spriteWallBucketCount)
                 {
-                    // Does not cover sprite.
-                    continue;
+                    lastBucket = spriteWallBucketCount - 1;
                 }
 
-                var r1 = wall.X1 < sprite.X1 ? sprite.X1 : wall.X1;
-                var r2 = wall.X2 > sprite.X2 ? sprite.X2 : wall.X2;
-
-                Fixed lowScale;
-                Fixed scale;
-                if (wall.Scale1 > wall.Scale2)
+                if (firstBucket == lastBucket)
                 {
-                    lowScale = wall.Scale2;
-                    scale = wall.Scale1;
+                    ScanSpriteWallBits(sprite, spriteWallBucketBits, firstBucket * spriteWallWordCount);
                 }
-                else
+                else if (firstBucket < lastBucket)
                 {
-                    lowScale = wall.Scale1;
-                    scale = wall.Scale2;
-                }
+                    Array.Clear(spriteWallCandidateBits, 0, spriteWallWordCount);
 
-                if (scale < sprite.Scale ||
-                    (lowScale < sprite.Scale &&
-                        Geometry.PointOnSegSide(sprite.GlobalX, sprite.GlobalY, wall.Seg) == 0))
-                {
-                    // Masked mid texture?
-                    if (wall.MaskedTextureColumn != -1)
+                    for (var bucket = firstBucket; bucket <= lastBucket; bucket++)
                     {
-                        DrawMaskedRange(wall, r1, r2);
-                    }
-                    // Seg is behind sprite.
-                    continue;
-                }
+                        var offset = bucket * spriteWallWordCount;
 
-                // Clip this piece of the sprite.
-                var silhouette = wall.Silhouette;
-
-                if (sprite.GlobalBottomZ >= wall.LowerSilHeight)
-                {
-                    silhouette &= ~Silhouette.Lower;
-                }
-
-                if (sprite.GlobalTopZ <= wall.UpperSilHeight)
-                {
-                    silhouette &= ~Silhouette.Upper;
-                }
-
-                if (silhouette == Silhouette.Lower)
-                {
-                    // Bottom sil.
-                    for (var x = r1; x <= r2; x++)
-                    {
-                        if (lowerClip[x] == -2)
+                        for (var word = 0; word < spriteWallWordCount; word++)
                         {
-                            lowerClip[x] = clipData[wall.LowerClip + x];
+                            spriteWallCandidateBits[word] |= spriteWallBucketBits[offset + word];
                         }
                     }
-                }
-                else if (silhouette == Silhouette.Upper)
-                {
-                    // Top sil.
-                    for (var x = r1; x <= r2; x++)
-                    {
-                        if (upperClip[x] == -2)
-                        {
-                            upperClip[x] = clipData[wall.UpperClip + x];
-                        }
-                    }
-                }
-                else if (silhouette == Silhouette.Both)
-                {
-                    // Both.
-                    for (var x = r1; x <= r2; x++)
-                    {
-                        if (lowerClip[x] == -2)
-                        {
-                            lowerClip[x] = clipData[wall.LowerClip + x];
-                        }
-                        if (upperClip[x] == -2)
-                        {
-                            upperClip[x] = clipData[wall.UpperClip + x];
-                        }
-                    }
+
+                    ScanSpriteWallBits(sprite, spriteWallCandidateBits, 0);
                 }
             }
 
-            // All clipping has been performed, so draw the sprite.
-
-            // Check for unclipped columns.
             for (var x = sprite.X1; x <= sprite.X2; x++)
             {
                 if (lowerClip[x] == -2)
                 {
                     lowerClip[x] = (short)windowHeight;
                 }
+
                 if (upperClip[x] == -2)
-                {
                     upperClip[x] = -1;
-                }
             }
+
+            var topY = centerYFrac - sprite.TextureAlt * sprite.Scale;
+            var absInvScale = Fixed.Abs(sprite.InvScale);
+            var patchColumns = sprite.Patch.Columns;
 
             if ((sprite.MobjFlags & MobjFlags.Shadow) != 0)
             {
                 var frac = sprite.StartFrac;
+
                 for (var x = sprite.X1; x <= sprite.X2; x++)
                 {
                     var textureColumn = frac.ToIntFloor();
-                    DrawMaskedFuzzColumn(
-                        sprite.Patch.Columns[textureColumn],
-                        x,
-                        centerYFrac - (sprite.TextureAlt * sprite.Scale),
-                        sprite.Scale,
-                        upperClip[x],
-                        lowerClip[x]);
-                    frac += sprite.InvScale;
-                }
-            }
-            else if (((int)(sprite.MobjFlags & MobjFlags.Translation) >> (int)MobjFlags.TransShift) != 0)
-            {
-                byte[] translation;
-                switch (((int)(sprite.MobjFlags & MobjFlags.Translation) >> (int)MobjFlags.TransShift))
-                {
-                    case 1:
-                        translation = greenToGray;
-                        break;
-                    case 2:
-                        translation = greenToBrown;
-                        break;
-                    default:
-                        translation = greenToRed;
-                        break;
-                }
-                var frac = sprite.StartFrac;
-                for (var x = sprite.X1; x <= sprite.X2; x++)
-                {
-                    var textureColumn = frac.ToIntFloor();
-                    DrawMaskedColumnTranslation(
-                        sprite.Patch.Columns[textureColumn],
-                        translation,
-                        sprite.ColorMap,
-                        x,
-                        centerYFrac - (sprite.TextureAlt * sprite.Scale),
-                        sprite.Scale,
-                        Fixed.Abs(sprite.InvScale),
-                        sprite.TextureAlt,
-                        upperClip[x],
-                        lowerClip[x]);
+
+                    DrawMaskedFuzzColumn(patchColumns[textureColumn], x, topY, sprite.Scale, upperClip[x], lowerClip[x]);
+
                     frac += sprite.InvScale;
                 }
             }
             else
             {
-                var frac = sprite.StartFrac;
-                for (var x = sprite.X1; x <= sprite.X2; x++)
+                var translationIndex = (int)(sprite.MobjFlags & MobjFlags.Translation) >> (int)MobjFlags.TransShift;
+
+                if (translationIndex != 0)
                 {
-                    var textureColumn = frac.ToIntFloor();
-                    DrawMaskedColumn(
-                        sprite.Patch.Columns[textureColumn],
-                        sprite.ColorMap,
-                        x,
-                        centerYFrac - (sprite.TextureAlt * sprite.Scale),
-                        sprite.Scale,
-                        Fixed.Abs(sprite.InvScale),
-                        sprite.TextureAlt,
-                        upperClip[x],
-                        lowerClip[x]);
-                    frac += sprite.InvScale;
+                    byte[] translation = translationIndex switch
+                    {
+                        1 => greenToGray,
+                        2 => greenToBrown,
+                        _ => greenToRed
+                    };
+
+                    var frac = sprite.StartFrac;
+
+                    for (var x = sprite.X1; x <= sprite.X2; x++)
+                    {
+                        var textureColumn = frac.ToIntFloor();
+
+                        DrawMaskedColumnTranslation(patchColumns[textureColumn], translation, sprite.ColorMap, x, topY, sprite.Scale, absInvScale, sprite.TextureAlt, upperClip[x], lowerClip[x]);
+
+                        frac += sprite.InvScale;
+                    }
+                }
+                else
+                {
+                    var frac = sprite.StartFrac;
+
+                    for (var x = sprite.X1; x <= sprite.X2; x++)
+                    {
+                        var textureColumn = frac.ToIntFloor();
+
+                        DrawMaskedColumn(patchColumns[textureColumn], sprite.ColorMap, x, topY, sprite.Scale, absInvScale, sprite.TextureAlt, upperClip[x], lowerClip[x]);
+
+                        frac += sprite.InvScale;
+                    }
                 }
             }
         }
@@ -2953,7 +2888,170 @@ namespace ManagedDoom.Video
             }
         }
 
+        private void BuildSpriteWallIndex()
+        {
+            spriteWallBucketCount = (windowWidth + SpriteWallBucketSize - 1) >> SpriteWallBucketShift;
 
+            spriteWallWordCount = (visWallRangeCount + 63) >> 6;
+
+            if (spriteWallBucketCount == 0 || spriteWallWordCount == 0)
+            {
+                return;
+            }
+
+            var required = spriteWallBucketCount * spriteWallWordCount;
+
+            if (spriteWallBucketBits.Length < required)
+            {
+                spriteWallBucketBits = new ulong[required];
+            }
+            else
+            {
+                Array.Clear(spriteWallBucketBits, 0, required);
+            }
+
+            if (spriteWallCandidateBits.Length < spriteWallWordCount)
+            {
+                spriteWallCandidateBits = new ulong[spriteWallWordCount];
+            }
+
+            for (var i = 0; i < visWallRangeCount; i++)
+            {
+                var wall = visWallRanges[i];
+
+                // DrawSprite would reject these drawsegs immediately.
+                if (wall.Silhouette == 0 && wall.MaskedTextureColumn == -1)
+                {
+                    continue;
+                }
+
+                var left = wall.X1 < 0 ? 0 : wall.X1;
+                var right = wall.X2 >= windowWidth ? windowWidth - 1 : wall.X2;
+
+                if (left > right)
+                    continue;
+
+                var firstBucket = left >> SpriteWallBucketShift;
+                var lastBucket = right >> SpriteWallBucketShift;
+                var word = i >> 6;
+                var mask = 1UL << (i & 63);
+
+                for (var bucket = firstBucket; bucket <= lastBucket; bucket++)
+                {
+                    spriteWallBucketBits[bucket * spriteWallWordCount + word] |= mask;
+                }
+            }
+        }
+        
+        private void ScanSpriteWallBits(VisSprite sprite, ulong[] bits, int offset)
+        {
+            // High word -> low word and high bit -> low bit keeps exactly the
+            // original visWallRangeCount - 1 ... 0 drawseg processing order.
+            for (var word = spriteWallWordCount - 1; word >= 0; word--)
+            {
+                var value = bits[offset + word];
+
+                while (value != 0)
+                {
+                    var bit = 63 - BitOperations.LeadingZeroCount(value);
+
+                    var wallIndex = (word << 6) + bit;
+
+                    value &= ~(1UL << bit);
+
+                    if (wallIndex < visWallRangeCount)
+                    {
+                        ProcessSpriteWall(sprite, wallIndex);
+                    }
+                }
+            }
+        }
+        
+        private void ProcessSpriteWall(VisSprite sprite, int wallIndex)
+        {
+            var wall = visWallRanges[wallIndex];
+
+            // Buckets are only a broad phase. Keep Doom's exact overlap check.
+            if (wall.X1 > sprite.X2 || wall.X2 < sprite.X1)
+            {
+                return;
+            }
+
+            var r1 = wall.X1 < sprite.X1 ? sprite.X1 : wall.X1;
+            var r2 = wall.X2 > sprite.X2 ? sprite.X2 : wall.X2;
+
+            Fixed lowScale;
+            Fixed scale;
+
+            if (wall.Scale1 > wall.Scale2)
+            {
+                lowScale = wall.Scale2;
+                scale = wall.Scale1;
+            }
+            else
+            {
+                lowScale = wall.Scale1;
+                scale = wall.Scale2;
+            }
+
+            if (scale < sprite.Scale || (lowScale < sprite.Scale && Geometry.PointOnSegSide(sprite.GlobalX, sprite.GlobalY, wall.Seg) == 0))
+            {
+                if (wall.MaskedTextureColumn != -1)
+                {
+                    DrawMaskedRange(wall, r1, r2);
+                }
+
+                return;
+            }
+
+            var silhouette = wall.Silhouette;
+
+            if (sprite.GlobalBottomZ >= wall.LowerSilHeight)
+            {
+                silhouette &= ~Silhouette.Lower;
+            }
+
+            if (sprite.GlobalTopZ <= wall.UpperSilHeight)
+            {
+                silhouette &= ~Silhouette.Upper;
+            }
+
+            if (silhouette == Silhouette.Lower)
+            {
+                for (var x = r1; x <= r2; x++)
+                {
+                    if (lowerClip[x] == -2)
+                    {
+                        lowerClip[x] = clipData[wall.LowerClip + x];
+                    }
+                }
+            }
+            else if (silhouette == Silhouette.Upper)
+            {
+                for (var x = r1; x <= r2; x++)
+                {
+                    if (upperClip[x] == -2)
+                    {
+                        upperClip[x] = clipData[wall.UpperClip + x];
+                    }
+                }
+            }
+            else if (silhouette == Silhouette.Both)
+            {
+                for (var x = r1; x <= r2; x++)
+                {
+                    if (lowerClip[x] == -2)
+                    {
+                        lowerClip[x] = clipData[wall.LowerClip + x];
+                    }
+
+                    if (upperClip[x] == -2)
+                    {
+                        upperClip[x] = clipData[wall.UpperClip + x];
+                    }
+                }
+            }
+        }
 
         public int WindowSize
         {

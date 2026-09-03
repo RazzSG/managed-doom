@@ -16,12 +16,15 @@
 
 
 using System;
+using System.IO;
 
 namespace ManagedDoom
 {
     public sealed class Node
     {
-        private static readonly int dataSize = 28;
+        private const int DataSize = 28;
+        private const ushort ClassicSubsectorFlag = 0x8000;
+        public const uint ExtendedSubsectorFlag = 0x80000000u;
 
         private Fixed x;
         private Fixed y;
@@ -53,37 +56,37 @@ namespace ManagedDoom
             this.dx = dx;
             this.dy = dy;
 
-            var frontBoundingBox = new Fixed[4]
-            {
-                frontBoundingBoxTop,
-                frontBoundingBoxBottom,
-                frontBoundingBoxLeft,
-                frontBoundingBoxRight
-            };
+            boundingBox =
+            [
+                [
+                    frontBoundingBoxTop,
+                    frontBoundingBoxBottom,
+                    frontBoundingBoxLeft,
+                    frontBoundingBoxRight
+                ],
+                [
+                    backBoundingBoxTop,
+                    backBoundingBoxBottom,
+                    backBoundingBoxLeft,
+                    backBoundingBoxRight
+                ]
+            ];
 
-            var backBoundingBox = new Fixed[4]
-            {
-                backBoundingBoxTop,
-                backBoundingBoxBottom,
-                backBoundingBoxLeft,
-                backBoundingBoxRight
-            };
-
-            boundingBox = new Fixed[][]
-            {
-                frontBoundingBox,
-                backBoundingBox
-            };
-
-            children = new int[]
-            {
+            children =
+            [
                 frontChild,
                 backChild
-            };
+            ];
         }
 
         public static Node FromData(byte[] data, int offset)
         {
+            if (data == null)
+                throw new ArgumentNullException(nameof(data));
+
+            if (offset < 0 || offset > data.Length - DataSize)
+                throw new InvalidDataException($"Classic node is truncated at offset {offset}.");
+
             var x = BitConverter.ToInt16(data, offset);
             var y = BitConverter.ToInt16(data, offset + 2);
             var dx = BitConverter.ToInt16(data, offset + 4);
@@ -96,8 +99,8 @@ namespace ManagedDoom
             var backBoundingBoxBottom = BitConverter.ToInt16(data, offset + 18);
             var backBoundingBoxLeft = BitConverter.ToInt16(data, offset + 20);
             var backBoundingBoxRight = BitConverter.ToInt16(data, offset + 22);
-            var frontChild = BitConverter.ToInt16(data, offset + 24);
-            var backChild = BitConverter.ToInt16(data, offset + 26);
+            var frontChild = NormalizeClassicChild(BitConverter.ToUInt16(data, offset + 24));
+            var backChild = NormalizeClassicChild(BitConverter.ToUInt16(data, offset + 26));
 
             return new Node(
                 Fixed.FromInt(x),
@@ -118,33 +121,41 @@ namespace ManagedDoom
 
         public static Node[] FromWad(Wad wad, int lump, Subsector[] subsectors)
         {
-            var length = wad.GetLumpSize(lump);
-            if (length % Node.dataSize != 0)
+            var data = wad.ReadLump(lump);
+
+            if (data.Length % DataSize != 0)
             {
-                throw new Exception();
+                throw new InvalidDataException($"Classic NODES lump has invalid size {data.Length}; " + $"expected a multiple of {DataSize}.");
             }
 
-            var data = wad.ReadLump(lump);
-            var count = length / Node.dataSize;
+            var count = data.Length / DataSize;
             var nodes = new Node[count];
 
             for (var i = 0; i < count; i++)
-            {
-                var offset = Node.dataSize * i;
-                nodes[i] = Node.FromData(data, offset);
-            }
+                nodes[i] = FromData(data, DataSize * i);
 
             return nodes;
         }
 
+        private static int NormalizeClassicChild(ushort child)
+        {
+            if ((child & ClassicSubsectorFlag) == 0)
+                return child;
+
+            return unchecked((int)(ExtendedSubsectorFlag | (uint)(child & ~ClassicSubsectorFlag)));
+        }
+
         public static bool IsSubsector(int node)
         {
-            return (node & unchecked((int)0xFFFF8000)) != 0;
+            return node == -1 || ((uint)node & ExtendedSubsectorFlag) != 0;
         }
 
         public static int GetSubsector(int node)
         {
-            return node ^ unchecked((int)0xFFFF8000);
+            if (node == -1)
+                return 0;
+
+            return (int)((uint)node & ~ExtendedSubsectorFlag);
         }
 
         public Fixed X => x;

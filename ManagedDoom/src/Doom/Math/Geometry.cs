@@ -32,9 +32,11 @@ namespace ManagedDoom
                 return slopeRange;
             }
 
-            var ans = ((uint)num.Data << 3) / ((uint)den.Data >> 8);
+            var numerator = (ulong)(uint)num.Data << 3;
+            var denominator = (uint)den.Data >> 8;
+            var ans = numerator / denominator;
 
-            return ans <= slopeRange ? ans : slopeRange;
+            return ans <= slopeRange ? (uint)ans : slopeRange;
         }
 
         /// <summary>

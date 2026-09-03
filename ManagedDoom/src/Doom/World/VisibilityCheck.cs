@@ -21,19 +21,18 @@ namespace ManagedDoom
 {
 	public sealed class VisibilityCheck
 	{
-		private World world;
+		private readonly World world;
 
 		// Eye z of looker.
 		private Fixed sightZStart;
 		private Fixed bottomSlope;
 		private Fixed topSlope;
 
-		// From looker to target.
-		private DivLine trace;
+		private readonly DivLine trace;
 		private Fixed targetX;
 		private Fixed targetY;
-
-		private DivLine occluder;
+		private readonly DivLine occluder;
+		private readonly Func<LineDef, bool> sightLineFunc;
 
 		public VisibilityCheck(World world)
 		{
@@ -42,6 +41,7 @@ namespace ManagedDoom
 			trace = new DivLine();
 
 			occluder = new DivLine();
+			sightLineFunc = CrossLine;
 		}
 
 		/// <summary>
@@ -58,183 +58,200 @@ namespace ManagedDoom
 			}
 
 			var num = ((v1.X - v2.X) >> 8) * v1.Dy + ((v2.Y - v1.Y) >> 8) * v1.Dx;
+			return num / den;
+		}
 
-			var frac = num / den;
+		private void SetupTrace(Mobj looker, Mobj target)
+		{
+			sightZStart = looker.Z + looker.Height - (looker.Height >> 2);
+			topSlope = target.Z + target.Height - sightZStart;
+			bottomSlope = target.Z - sightZStart;
 
-			return frac;
+			trace.X = looker.X;
+			trace.Y = looker.Y;
+			trace.Dx = target.X - looker.X;
+			trace.Dy = target.Y - looker.Y;
+
+			targetX = target.X;
+			targetY = target.Y;
 		}
 
 		/// <summary>
-		/// Returns true if strace crosses the given subsector successfully.
+		/// Processes one unique linedef touched by the blockmap cells crossed by the sight trace.
+		/// Slope clipping is order independent (max bottom slope / min top slope), so unlike
+		/// PathTraversal we do not need to allocate/sort intercepts.
 		/// </summary>
-		private bool CrossSubsector(int subsectorNumber, int validCount)
+		private bool CrossLine(LineDef line)
 		{
-			var map = world.Map;
-			var subsector = map.Subsectors[subsectorNumber];
-			var count = subsector.SegCount;
+			var v1 = line.Vertex1;
+			var v2 = line.Vertex2;
+			var s1 = Geometry.DivLineSide(v1.X, v1.Y, trace);
+			var s2 = Geometry.DivLineSide(v2.X, v2.Y, trace);
 
-			// Check lines.
-			for (var i = 0; i < count; i++)
-			{
-				var seg = map.Segs[subsector.FirstSeg + i];
-				var line = seg.LineDef;
-
-				// Allready checked other side?
-				if (line.ValidCount == validCount)
-				{
-					continue;
-				}
-
-				line.ValidCount = validCount;
-
-				var v1 = line.Vertex1;
-				var v2 = line.Vertex2;
-				var s1 = Geometry.DivLineSide(v1.X, v1.Y, trace);
-				var s2 = Geometry.DivLineSide(v2.X, v2.Y, trace);
-
-				// Line isn't crossed?
-				if (s1 == s2)
-				{
-					continue;
-				}
-
-				occluder.MakeFrom(line);
-				s1 = Geometry.DivLineSide(trace.X, trace.Y, occluder);
-				s2 = Geometry.DivLineSide(targetX, targetY, occluder);
-
-				// Line isn't crossed?
-				if (s1 == s2)
-				{
-					continue;
-				}
-
-				// The check below is imported from Chocolate Doom to
-				// avoid crash due to two-sided lines with no backsector.
-				if (line.BackSector == null)
-				{
-					return false;
-				}
-
-				// Stop because it is not two sided anyway.
-				// Might do this after updating validcount?
-				if ((line.Flags & LineFlags.TwoSided) == 0)
-				{
-					return false;
-				}
-
-				// Crosses a two sided line.
-				var front = seg.FrontSector;
-				var back = seg.BackSector;
-
-				// No wall to block sight with?
-				if (front.FloorHeight == back.FloorHeight &&
-					front.CeilingHeight == back.CeilingHeight)
-				{
-					continue;
-				}
-
-				// Possible occluder because of ceiling height differences.
-				Fixed openTop;
-				if (front.CeilingHeight < back.CeilingHeight)
-				{
-					openTop = front.CeilingHeight;
-				}
-				else
-				{
-					openTop = back.CeilingHeight;
-				}
-
-				// Because of ceiling height differences.
-				Fixed openBottom;
-				if (front.FloorHeight > back.FloorHeight)
-				{
-					openBottom = front.FloorHeight;
-				}
-				else
-				{
-					openBottom = back.FloorHeight;
-				}
-
-				// Quick test for totally closed doors.
-				if (openBottom >= openTop)
-				{
-					// Stop.
-					return false;
-				}
-
-				var frac = InterceptVector(trace, occluder);
-
-				if (front.FloorHeight != back.FloorHeight)
-				{
-					var slope = (openBottom - sightZStart) / frac;
-					if (slope > bottomSlope)
-					{
-						bottomSlope = slope;
-					}
-				}
-
-				if (front.CeilingHeight != back.CeilingHeight)
-				{
-					var slope = (openTop - sightZStart) / frac;
-					if (slope < topSlope)
-					{
-						topSlope = slope;
-					}
-				}
-
-				if (topSlope <= bottomSlope)
-				{
-					// Stop.
-					return false;
-				}
-			}
-
-			// Passed the subsector ok.
-			return true;
-		}
-
-		/// <summary>
-		/// Returns true if strace crosses the given node successfully.
-		/// </summary>
-		private bool CrossBspNode(int nodeNumber, int validCount)
-		{
-			if (Node.IsSubsector(nodeNumber))
-			{
-				if (nodeNumber == -1)
-				{
-					return CrossSubsector(0, validCount);
-				}
-				else
-				{
-					return CrossSubsector(Node.GetSubsector(nodeNumber), validCount);
-				}
-			}
-
-			var node = world.Map.Nodes[nodeNumber];
-
-			// Decide which side the start point is on.
-			var side = Geometry.DivLineSide(trace.X, trace.Y, node);
-			if (side == 2)
-			{
-				// An "on" should cross both sides.
-				side = 0;
-			}
-
-			// cross the starting side
-			if (!CrossBspNode(node.Children[side], validCount))
-			{
-				return false;
-			}
-
-			// The partition plane is crossed here.
-			if (side == Geometry.DivLineSide(targetX, targetY, node))
-			{
-				// The line doesn't touch the other side.
+			if (s1 == s2)
 				return true;
+
+			occluder.MakeFrom(line);
+			s1 = Geometry.DivLineSide(trace.X, trace.Y, occluder);
+			s2 = Geometry.DivLineSide(targetX, targetY, occluder);
+
+			if (s1 == s2)
+				return true;
+
+			// Chocolate Doom safeguard for malformed two-sided lines.
+			var back = line.BackSector;
+			if (back == null)
+				return false;
+
+			if ((line.Flags & LineFlags.TwoSided) == 0)
+				return false;
+
+			var front = line.FrontSector;
+			if (front == null)
+				return false;
+
+			if (front.FloorHeight == back.FloorHeight && front.CeilingHeight == back.CeilingHeight)
+				return true;
+
+			var openTop = Fixed.Min(front.CeilingHeight, back.CeilingHeight);
+			var openBottom = Fixed.Max(front.FloorHeight, back.FloorHeight);
+
+			if (openBottom >= openTop)
+				return false;
+
+			var frac = InterceptVector(trace, occluder);
+
+			if (front.FloorHeight != back.FloorHeight)
+			{
+				var slope = (openBottom - sightZStart) / frac;
+				if (slope > bottomSlope)
+					bottomSlope = slope;
 			}
 
-			// Cross the ending side.
-			return CrossBspNode(node.Children[side ^ 1], validCount);
+			if (front.CeilingHeight != back.CeilingHeight)
+			{
+				var slope = (openTop - sightZStart) / frac;
+				if (slope < topSlope)
+					topSlope = slope;
+			}
+
+			return topSlope > bottomSlope;
+		}
+
+		/// <summary>
+		/// Traverses only blockmap cells crossed by the sight segment. This avoids walking
+		/// hundreds of BSP subsectors in large open maps such as NUTS.
+		/// </summary>
+		private bool CrossBlockMap()
+		{
+			var bm = world.Map.BlockMap;
+			var validCount = world.GetNewValidCount();
+
+			var x1 = trace.X;
+			var y1 = trace.Y;
+			var x2 = targetX;
+			var y2 = targetY;
+
+			// Same anti-boundary nudge used by Doom's PathTraversal.
+			if (((x1 - bm.OriginX).Data & (BlockMap.BlockSize.Data - 1)) == 0)
+				x1 += Fixed.One;
+
+			if (((y1 - bm.OriginY).Data & (BlockMap.BlockSize.Data - 1)) == 0)
+				y1 += Fixed.One;
+
+			var localX1 = x1 - bm.OriginX;
+			var localY1 = y1 - bm.OriginY;
+			var localX2 = x2 - bm.OriginX;
+			var localY2 = y2 - bm.OriginY;
+
+			var blockX1 = localX1.Data >> BlockMap.FracToBlockShift;
+			var blockY1 = localY1.Data >> BlockMap.FracToBlockShift;
+			var blockX2 = localX2.Data >> BlockMap.FracToBlockShift;
+			var blockY2 = localY2.Data >> BlockMap.FracToBlockShift;
+
+			Fixed stepX;
+			Fixed stepY;
+			Fixed partial;
+			int blockStepX;
+			int blockStepY;
+
+			if (blockX2 > blockX1)
+			{
+				blockStepX = 1;
+				partial = new Fixed(Fixed.FracUnit - ((localX1.Data >> BlockMap.BlockToFracShift) & (Fixed.FracUnit - 1)));
+				stepY = (localY2 - localY1) / Fixed.Abs(localX2 - localX1);
+			}
+			else if (blockX2 < blockX1)
+			{
+				blockStepX = -1;
+				partial = new Fixed((localX1.Data >> BlockMap.BlockToFracShift) & (Fixed.FracUnit - 1));
+				stepY = (localY2 - localY1) / Fixed.Abs(localX2 - localX1);
+			}
+			else
+			{
+				blockStepX = 0;
+				partial = Fixed.One;
+				stepY = Fixed.FromInt(256);
+			}
+
+			var interceptY = new Fixed(localY1.Data >> BlockMap.BlockToFracShift) + partial * stepY;
+
+			if (blockY2 > blockY1)
+			{
+				blockStepY = 1;
+				partial = new Fixed(Fixed.FracUnit - ((localY1.Data >> BlockMap.BlockToFracShift) & (Fixed.FracUnit - 1)));
+				stepX = (localX2 - localX1) / Fixed.Abs(localY2 - localY1);
+			}
+			else if (blockY2 < blockY1)
+			{
+				blockStepY = -1;
+				partial = new Fixed((localY1.Data >> BlockMap.BlockToFracShift) & (Fixed.FracUnit - 1));
+				stepX = (localX2 - localX1) / Fixed.Abs(localY2 - localY1);
+			}
+			else
+			{
+				blockStepY = 0;
+				partial = Fixed.One;
+				stepX = Fixed.FromInt(256);
+			}
+
+			var interceptX = new Fixed(localX1.Data >> BlockMap.BlockToFracShift) + partial * stepX;
+			var bx = blockX1;
+			var by = blockY1;
+
+			// One axis advances per iteration, so this is enough even on huge maps.
+			var maxStepsLong = (long)Math.Abs(blockX2 - blockX1) + Math.Abs(blockY2 - blockY1) + 2;
+			var maxSteps = maxStepsLong > int.MaxValue ? int.MaxValue : (int)maxStepsLong;
+
+			for (var count = 0; count < maxSteps; count++)
+			{
+				if (!bm.IterateLines(bx, by, sightLineFunc, validCount))
+					return false;
+
+				if (bx == blockX2 && by == blockY2)
+					return true;
+
+				if (interceptY.ToIntFloor() == by)
+				{
+					interceptY += stepY;
+					bx += blockStepX;
+				}
+				else if (interceptX.ToIntFloor() == bx)
+				{
+					interceptX += stepX;
+					by += blockStepY;
+				}
+				else
+				{
+					// Rounding fallback: move toward the destination instead of getting stuck.
+					if (bx != blockX2)
+						bx += blockStepX;
+					else if (by != blockY2)
+						by += blockStepY;
+				}
+			}
+
+			return true;
 		}
 
 		/// <summary>
@@ -244,31 +261,12 @@ namespace ManagedDoom
 		{
 			var map = world.Map;
 
-			// First check for trivial rejection.
-			// Check in REJECT table.
+			// Preserve Doom's REJECT fast path when a useful REJECT table is present.
 			if (map.Reject.Check(looker.Subsector.Sector, target.Subsector.Sector))
-			{
-				// Can't possibly be connected.
 				return false;
-			}
 
-			// An unobstructed LOS is possible.
-			// Now look from eyes of t1 to any part of t2.
-
-			sightZStart = looker.Z + looker.Height - (looker.Height >> 2);
-			topSlope = (target.Z + target.Height) - sightZStart;
-			bottomSlope = (target.Z) - sightZStart;
-
-			trace.X = looker.X;
-			trace.Y = looker.Y;
-			trace.Dx = target.X - looker.X;
-			trace.Dy = target.Y - looker.Y;
-
-			targetX = target.X;
-			targetY = target.Y;
-
-			// The head node is the last node output.
-			return CrossBspNode(map.Nodes.Length - 1, world.GetNewValidCount());
+			SetupTrace(looker, target);
+			return CrossBlockMap();
 		}
 	}
 }
