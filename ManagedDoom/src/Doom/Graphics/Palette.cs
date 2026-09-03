@@ -92,5 +92,10 @@ namespace ManagedDoom
                 return palettes[paletteNumber];
             }
         }
+        
+        public int Count
+        {
+            get { return palettes.Length; }
+        }
     }
 }

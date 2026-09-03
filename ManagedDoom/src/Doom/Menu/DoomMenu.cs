@@ -250,6 +250,18 @@ namespace ManagedDoom
                     video.MaxWindowSize + 1,
                     () => video.WindowSize,
                     size => video.WindowSize = size),
+                
+                new ChoiceMenuItem(
+                    "COLOR MODE",
+                    28, 80,
+                    60, 85,
+                    [
+                        "CLASSIC",
+                        "TRUE COLOR"
+                    ],
+                    215,
+                    () => (int)video.ColorMode,
+                    value => video.ColorMode = (Video.ColorMode)value),
 
                 new SliderMenuItem(
                     "M_MSENS", 28, 112 - 16, 60, 117 - 16,

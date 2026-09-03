@@ -18,6 +18,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using ManagedDoom.Video;
 
 namespace ManagedDoom
 {
@@ -47,6 +48,7 @@ namespace ManagedDoom
         public int video_gamescreensize;
         public int video_gammacorrection;
         public int video_fpsscale;
+        public ColorMode video_colormode;
         
         public bool video_crosshair;
         public int video_crosshair_type;
@@ -143,6 +145,7 @@ namespace ManagedDoom
             video_displaymessage = true;
             video_gammacorrection = 2;
             video_fpsscale = 2;
+            video_colormode = ColorMode.Indexed;
             
             video_crosshair = false;
             video_crosshair_type = 0;
@@ -200,6 +203,7 @@ namespace ManagedDoom
                 video_gamescreensize = GetInt(dic, nameof(video_gamescreensize), video_gamescreensize);
                 video_gammacorrection = GetInt(dic, nameof(video_gammacorrection), video_gammacorrection);
                 video_fpsscale = GetInt(dic, nameof(video_fpsscale), video_fpsscale);
+                video_colormode = (ColorMode)Math.Clamp(GetInt(dic, nameof(video_colormode), (int)video_colormode), (int)ColorMode.Indexed, (int)ColorMode.TrueColor);
                 
                 video_crosshair = GetBool(dic, nameof(video_crosshair), video_crosshair);
                 video_crosshair_type = GetInt(dic, nameof(video_crosshair_type), video_crosshair_type);
@@ -254,6 +258,7 @@ namespace ManagedDoom
                     writer.WriteLine(nameof(video_gamescreensize) + " = " + video_gamescreensize);
                     writer.WriteLine(nameof(video_gammacorrection) + " = " + video_gammacorrection);
                     writer.WriteLine(nameof(video_fpsscale) + " = " + video_fpsscale);
+                    writer.WriteLine(nameof(video_colormode) + " = " + (int)video_colormode);
 
                     writer.WriteLine(nameof(video_crosshair) + " = " + BoolToString(video_crosshair));
                     writer.WriteLine(nameof(video_crosshair_type) + " = " + video_crosshair_type);

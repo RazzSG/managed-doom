@@ -69,5 +69,10 @@ namespace ManagedDoom
                 return data[0];
             }
         }
+        
+        public int Count
+        {
+            get { return data.Length; }
+        }
     }
 }

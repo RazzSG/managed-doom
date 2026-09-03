@@ -40,7 +40,11 @@ namespace ManagedDoom.Video
         private Config config;
 
         private Palette palette;
+        private TrueColorMap trueColorMap;
+        private TrueColorPaletteEffect trueColorPaletteEffect;
 
+        private uint[] trueColorWipeBuffer;
+        private ColorMode wipeColorMode;
         private DrawScreen screen;
 
         private MenuRenderer menu;
@@ -66,14 +70,15 @@ namespace ManagedDoom.Video
             this.config = config;
 
             palette = content.Palette;
+            trueColorMap = content.TrueColorMap;
 
             if (config.video_highresolution)
             {
-                screen = new DrawScreen(content.Wad, 1280, 800);
+                screen = new DrawScreen(content.Wad, palette, 1280, 800);
             }
             else
             {
-                screen = new DrawScreen(content.Wad, 640, 400);
+                screen = new DrawScreen(content.Wad, palette, 640, 400);
             }
 
             config.video_gamescreensize = Math.Clamp(config.video_gamescreensize, 0, MaxWindowSize);
@@ -94,8 +99,13 @@ namespace ManagedDoom.Video
             wipeBandCount = screen.Width / wipeBandWidth + 1;
             wipeHeight = screen.Height / scale;
             wipeBuffer = new byte[screen.Data.Length];
+            trueColorWipeBuffer = new uint[screen.TrueColorData.Length];
 
             palette.ResetColors(gammaCorrectionParameters[config.video_gammacorrection]);
+            trueColorMap.Rebuild();
+
+            trueColorPaletteEffect = new TrueColorPaletteEffect(palette);
+            trueColorPaletteEffect.Rebuild();
         }
 
         public void RenderDoom(Doom doom, Fixed frameFrac)
@@ -195,32 +205,26 @@ namespace ManagedDoom.Video
                 return;
             }
 
+            screen.ColorMode = config.video_colormode;
+
             RenderDoom(doom, frameFrac);
             RenderMenu(doom);
 
-            var colors = palette[0];
-            if (doom.State == DoomState.Game &&
-                doom.Game.State == GameState.Level)
-            {
-                colors = palette[GetPaletteNumber(doom.Game.World.ConsolePlayer)];
-            }
-            else if (doom.State == DoomState.Opening &&
-                doom.Opening.State == OpeningSequenceState.Demo &&
-                doom.Opening.DemoGame.State == GameState.Level)
-            {
-                colors = palette[GetPaletteNumber(doom.Opening.DemoGame.World.ConsolePlayer)];
-            }
-            else if (doom.State == DoomState.DemoPlayback &&
-                doom.DemoPlayback.Game.State == GameState.Level)
-            {
-                colors = palette[GetPaletteNumber(doom.DemoPlayback.Game.World.ConsolePlayer)];
-            }
+            var paletteNumber = GetFramePaletteNumber(doom);
 
-            WriteData(colors, destination);
+            if (screen.ColorMode == ColorMode.TrueColor)
+            {
+                WriteTrueColorData(destination, paletteNumber);
+            }
+            else
+            {
+                WriteData(palette[paletteNumber], destination);
+            }
         }
 
         private void RenderWipe(Doom doom, byte[] destination)
         {
+            screen.ColorMode = wipeColorMode;
             RenderDoom(doom, Fixed.One);
 
             var wipe = doom.WipeEffect;
@@ -240,19 +244,65 @@ namespace ManagedDoom.Video
                     {
                         var srcPos = screen.Height * x;
                         var dstPos = screen.Height * x + y;
-                        Array.Copy(wipeBuffer, srcPos, screen.Data, dstPos, copyLength);
+                        if (wipeColorMode == ColorMode.TrueColor)
+                        {
+                            Array.Copy(trueColorWipeBuffer, srcPos, screen.TrueColorData, dstPos, copyLength);
+                        }
+                        else
+                        {
+                            Array.Copy(wipeBuffer, srcPos, screen.Data, dstPos, copyLength);
+                        }
                     }
                 }
             }
 
             RenderMenu(doom);
 
-            WriteData(palette[0], destination);
+            if (wipeColorMode == ColorMode.TrueColor)
+            {
+                WriteTrueColorData(destination, 0);
+            }
+            else
+            {
+                WriteData(palette[0], destination);
+            }
         }
 
         public void InitializeWipe()
         {
-            Array.Copy(screen.Data, wipeBuffer, screen.Data.Length);
+            wipeColorMode = screen.ColorMode;
+
+            if (wipeColorMode == ColorMode.TrueColor)
+            {
+                Array.Copy(screen.TrueColorData, trueColorWipeBuffer, trueColorWipeBuffer.Length);
+            }
+            else
+            {
+                Array.Copy(screen.Data, wipeBuffer, wipeBuffer.Length);
+            }
+        }
+        
+        private static int GetFramePaletteNumber(Doom doom)
+        {
+            if (doom.State == DoomState.Game && doom.Game.State == GameState.Level)
+            {
+                return GetPaletteNumber(doom.Game.World.ConsolePlayer);
+            }
+
+            if (doom.State == DoomState.Opening &&
+                doom.Opening.State == OpeningSequenceState.Demo &&
+                doom.Opening.DemoGame.State == GameState.Level)
+            {
+                return GetPaletteNumber(doom.Opening.DemoGame.World.ConsolePlayer);
+            }
+
+            if (doom.State == DoomState.DemoPlayback &&
+                doom.DemoPlayback.Game.State == GameState.Level)
+            {
+                return GetPaletteNumber(doom.DemoPlayback.Game.World.ConsolePlayer);
+            }
+
+            return 0;
         }
 
         private void WriteData(uint[] colors, byte[] destination)
@@ -631,6 +681,12 @@ namespace ManagedDoom.Video
             t = Math.Clamp(t, 0.0f, 1.0f);
             return (byte)Math.Clamp((int)MathF.Round(a + (b - a) * t), 0, 255);
         }
+        
+        private void WriteTrueColorData(byte[] destination, int paletteNumber)
+        {
+            var target = MemoryMarshal.Cast<byte, uint>(destination.AsSpan());
+            trueColorPaletteEffect.Write(screen.TrueColorData.AsSpan(0, target.Length), target, paletteNumber);
+        }
 
         public int Width => screen.Width;
         public int Height => screen.Height;
@@ -670,6 +726,17 @@ namespace ManagedDoom.Video
             set
             {
                 config.video_displaymessage = value;
+            }
+        }
+        
+        public ColorMode ColorMode
+        {
+            get => config.video_colormode;
+
+            set
+            {
+                config.video_colormode = value;
+                screen.ColorMode = value;
             }
         }
         
@@ -770,6 +837,8 @@ namespace ManagedDoom.Video
             {
                 config.video_gammacorrection = value;
                 palette.ResetColors(gammaCorrectionParameters[config.video_gammacorrection]);
+                trueColorMap.Rebuild();
+                trueColorPaletteEffect.Rebuild();
             }
         }
     }

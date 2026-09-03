@@ -72,6 +72,12 @@ namespace ManagedDoom.Video
             }
         }
 
+        public ColorMode ColorMode
+        {
+            get => ManagedDoom.Video.ColorMode.Indexed;
+            set { }
+        }
+
         public bool Crosshair
         {
             get => false;

@@ -25,14 +25,19 @@ namespace ManagedDoom.Video
         private int width;
         private int height;
         private byte[] data;
+        
+        private Palette palette;
+        private uint[] trueColorData;
 
         private Patch[] chars;
 
-        public DrawScreen(Wad wad, int width, int height)
+        public DrawScreen(Wad wad, Palette palette, int width, int height)
         {
+            this.palette = palette;
             this.width = width;
             this.height = height;
             data = new byte[width * height];
+            trueColorData = new uint[width * height];
 
             chars = new Patch[128];
             for (var i = 0; i < chars.Length; i++)
@@ -110,6 +115,7 @@ namespace ManagedDoom.Video
         private void DrawColumn(Column[] source, int x, int y, int scale)
         {
             var step = Fixed.One / scale;
+            var colors = palette[0];
 
             foreach (var column in source)
             {
@@ -134,13 +140,16 @@ namespace ManagedDoom.Video
 
                 if (drawY + drawLength > height)
                 {
-                    var exceed = drawY + drawLength - height;
-                    drawLength -= exceed;
+                    drawLength -= drawY + drawLength - height;
                 }
 
                 for (; i < drawLength; i++)
                 {
-                    data[p] = column.Data[sourceIndex + frac.ToIntFloor()];
+                    var color = column.Data[sourceIndex + frac.ToIntFloor()];
+
+                    data[p] = color;
+                    trueColorData[p] = colors[color];
+
                     p++;
                     frac += step;
                 }
@@ -348,12 +357,17 @@ namespace ManagedDoom.Video
         {
             var x1 = x;
             var x2 = x + w;
+            var index = (byte)color;
+            var rgb = palette[0][index];
+
             for (var drawX = x1; drawX < x2; drawX++)
             {
                 var pos = height * drawX + y;
+
                 for (var i = 0; i < h; i++)
                 {
-                    data[pos] = (byte)color;
+                    data[pos] = index;
+                    trueColorData[pos] = rgb;
                     pos++;
                 }
             }
@@ -486,7 +500,9 @@ namespace ManagedDoom.Video
 
                 while (true)
                 {
-                    data[height * x + y] = (byte)color;
+                    var pos = height * x + y;
+                    data[pos] = (byte)color;
+                    trueColorData[pos] = palette[0][color];
 
                     if (x == x2)
                     {
@@ -508,7 +524,9 @@ namespace ManagedDoom.Video
                 var d = ax - ay / 2;
                 while (true)
                 {
-                    data[height * x + y] = (byte)color;
+                    var pos = height * x + y;
+                    data[pos] = (byte)color;
+                    trueColorData[pos] = palette[0][color];
 
                     if (y == y2)
                     {
@@ -527,8 +545,41 @@ namespace ManagedDoom.Video
             }
         }
 
+        public void FillFlat(Flat flat, int x, int y, int w, int h, int scale)
+        {
+            var src = flat.Data;
+            var colors = palette[0];
+
+            var step = Fixed.One / scale;
+            var xFrac = Fixed.FromInt(x) / scale + step - Fixed.Epsilon;
+
+            for (var drawX = x; drawX < x + w; drawX++)
+            {
+                var yFrac = Fixed.FromInt(y) / scale + step - Fixed.Epsilon;
+                var p = height * drawX + y;
+
+                for (var drawY = y; drawY < y + h; drawY++)
+                {
+                    var spotX = xFrac.ToIntFloor() & 63;
+                    var spotY = yFrac.ToIntFloor() & 63;
+                    var color = src[(spotY << 6) + spotX];
+
+                    data[p] = color;
+                    trueColorData[p] = colors[color];
+
+                    p++;
+                    yFrac += step;
+                }
+
+                xFrac += step;
+            }
+        }
+
+        public ColorMode ColorMode { get; set; } = ColorMode.Indexed;
+        
         public int Width => width;
         public int Height => height;
         public byte[] Data => data;
+        public uint[] TrueColorData => trueColorData;
     }
 }

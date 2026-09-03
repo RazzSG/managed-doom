@@ -33,7 +33,10 @@ namespace ManagedDoom.Video
         private DrawScreen screen;
         private int screenWidth;
         private int screenHeight;
+        private TrueColorMap trueColorMap;
+
         private byte[] screenData;
+        private uint[] trueColorData;
         private int drawScale;
 
         private int windowSize;
@@ -43,6 +46,7 @@ namespace ManagedDoom.Video
         public ThreeDRenderer(GameContent content, DrawScreen screen, int windowSize)
         {
             colorMap = content.ColorMap;
+            trueColorMap = content.TrueColorMap;
             textures = content.Textures;
             flats = content.Flats;
             sprites = content.Sprites;
@@ -51,6 +55,7 @@ namespace ManagedDoom.Video
             screenWidth = screen.Width;
             screenHeight = screen.Height;
             screenData = screen.Data;
+            trueColorData = screen.TrueColorData;
             drawScale = screenWidth / 320;
 
             this.windowSize = windowSize;
@@ -236,7 +241,7 @@ namespace ManagedDoom.Video
         private Fixed[] ceilingYFrac;
         private Fixed[] ceilingXStep;
         private Fixed[] ceilingYStep;
-        private byte[][] ceilingLights;
+        private int[] ceilingLights;
 
         private Sector floorPrevSector;
         private int floorPrevX;
@@ -246,7 +251,7 @@ namespace ManagedDoom.Video
         private Fixed[] floorYFrac;
         private Fixed[] floorXStep;
         private Fixed[] floorYStep;
-        private byte[][] floorLights;
+        private int[] floorLights;
 
         private void InitPlaneRendering()
         {
@@ -256,12 +261,12 @@ namespace ManagedDoom.Video
             ceilingYFrac = new Fixed[screenHeight];
             ceilingXStep = new Fixed[screenHeight];
             ceilingYStep = new Fixed[screenHeight];
-            ceilingLights = new byte[screenHeight][];
+            ceilingLights = new int[screenHeight];
             floorXFrac = new Fixed[screenHeight];
             floorYFrac = new Fixed[screenHeight];
             floorXStep = new Fixed[screenHeight];
             floorYStep = new Fixed[screenHeight];
-            floorLights = new byte[screenHeight][];
+            floorLights = new int[screenHeight];
         }
 
         private void ResetPlaneRendering()
@@ -331,12 +336,14 @@ namespace ManagedDoom.Video
         private int maxScaleLight;
         private const int maxZLight = 128;
 
-        private byte[][][] diminishingScaleLight;
-        private byte[][][] diminishingZLight;
-        private byte[][][] fixedLight;
+        private int[][] diminishingScaleLight;
+        private int[][] diminishingZLight;
+        private int[][] fixedLight;
 
-        private byte[][][] scaleLight;
-        private byte[][][] zLight;
+        private int[][] scaleLight;
+        private int[][] zLight;
+
+        private int fixedLightColorMap = -1;
 
         private int extraLight;
         private int fixedColorMap;
@@ -345,15 +352,15 @@ namespace ManagedDoom.Video
         {
             maxScaleLight = 48 * (screenWidth / 320);
 
-            diminishingScaleLight = new byte[lightLevelCount][][];
-            diminishingZLight = new byte[lightLevelCount][][];
-            fixedLight = new byte[lightLevelCount][][];
+            diminishingScaleLight = new int[lightLevelCount][];
+            diminishingZLight = new int[lightLevelCount][];
+            fixedLight = new int[lightLevelCount][];
 
             for (var i = 0; i < lightLevelCount; i++)
             {
-                diminishingScaleLight[i] = new byte[maxScaleLight][];
-                diminishingZLight[i] = new byte[maxZLight][];
-                fixedLight[i] = new byte[Math.Max(maxScaleLight, maxZLight)][];
+                diminishingScaleLight[i] = new int[maxScaleLight];
+                diminishingZLight[i] = new int[maxZLight];
+                fixedLight[i] = new int[Math.Max(maxScaleLight, maxZLight)];
             }
 
             var distMap = 2;
@@ -377,7 +384,7 @@ namespace ManagedDoom.Video
                         level = colorMapCount - 1;
                     }
 
-                    diminishingZLight[i][j] = colorMap[level];
+                    diminishingZLight[i][j] = level;
                 }
             }
         }
@@ -402,7 +409,7 @@ namespace ManagedDoom.Video
                         level = colorMapCount - 1;
                     }
 
-                    diminishingScaleLight[i][j] = colorMap[level];
+                    diminishingScaleLight[i][j] = level;
                 }
             }
         }
@@ -413,17 +420,18 @@ namespace ManagedDoom.Video
             {
                 scaleLight = diminishingScaleLight;
                 zLight = diminishingZLight;
-                fixedLight[0][0] = null;
+                fixedLightColorMap = -1;
             }
-            else if (fixedLight[0][0] != colorMap[fixedColorMap])
+            else if (fixedLightColorMap != fixedColorMap)
             {
                 for (var i = 0; i < lightLevelCount; i++)
                 {
                     for (var j = 0; j < fixedLight[i].Length; j++)
                     {
-                        fixedLight[i][j] = colorMap[fixedColorMap];
+                        fixedLight[i][j] = fixedColorMap;
                     }
                 }
+                fixedLightColorMap = fixedColorMap;
                 scaleLight = fixedLight;
                 zLight = fixedLight;
             }
@@ -677,26 +685,7 @@ namespace ManagedDoom.Video
 
         private void FillRect(int x, int y, int width, int height)
         {
-            var data = backFlat.Data;
-
-            var srcX = x / drawScale;
-            var srcY = y / drawScale;
-
-            var invScale = Fixed.One / drawScale;
-            var xFrac = invScale - Fixed.Epsilon;
-
-            for (var i = 0; i < width; i++)
-            {
-                var src = ((srcX + xFrac.ToIntFloor()) & 63) << 6;
-                var dst = screenHeight * (x + i) + y;
-                var yFrac = invScale - Fixed.Epsilon;
-                for (var j = 0; j < height; j++)
-                {
-                    screenData[dst + j] = data[src | ((srcY + yFrac.ToIntFloor()) & 63)];
-                    yFrac += invScale;
-                }
-                xFrac += invScale;
-            }
+            screen.FillFlat(backFlat, x, y, width, height, drawScale);
         }
 
 
@@ -1611,7 +1600,7 @@ namespace ManagedDoom.Video
 
             var rwOffset = default(Fixed);
             var rwCenterAngle = default(Angle);
-            var wallLights = default(byte[][]);
+            var wallLights = default(int[]);
             if (segTextured)
             {
                 var textureOffsetAngle = rwNormalAngle - rwAngle1;
@@ -2012,12 +2001,22 @@ namespace ManagedDoom.Video
             }
         }
 
+        private void DrawCeilingColumn(Sector sector, Flat flat, int[] planeLights, int x, int y1, int y2, Fixed ceilingHeight)
+        {
+            if (screen.ColorMode == ColorMode.TrueColor)
+            {
+                DrawCeilingColumnTrueColor(sector, flat, planeLights, x, y1, y2, ceilingHeight);
+            }
+            else
+            {
+                DrawCeilingColumnIndexed(sector, flat, planeLights, x, y1, y2, ceilingHeight);
+            }
+        }
 
-
-        private void DrawCeilingColumn(
+        private void DrawCeilingColumnIndexed(
             Sector sector,
             Flat flat,
-            byte[][] planeLights,
+            int[] planeLights,
             int x,
             int y1,
             int y2,
@@ -2056,11 +2055,11 @@ namespace ManagedDoom.Video
                     ceilingXFrac[y] = xFrac;
                     ceilingYFrac[y] = yFrac;
 
-                    var colorMap = planeLights[Math.Min((uint)(distance.Data >> zLightShift), maxZLight - 1)];
-                    ceilingLights[y] = colorMap;
+                    var mapIndex = planeLights[Math.Min((uint)(distance.Data >> zLightShift), maxZLight - 1)];
+                    ceilingLights[y] = mapIndex;
 
                     var spot = ((yFrac.Data >> (16 - 6)) & (63 * 64)) + ((xFrac.Data >> 16) & 63);
-                    screenData[pos] = colorMap[flatData[spot]];
+                    screenData[pos] = colorMap[mapIndex][flatData[spot]];
                     pos++;
                 }
 
@@ -2070,7 +2069,7 @@ namespace ManagedDoom.Video
                     var yFrac = ceilingYFrac[y] + ceilingYStep[y];
 
                     var spot = ((yFrac.Data >> (16 - 6)) & (63 * 64)) + ((xFrac.Data >> 16) & 63);
-                    screenData[pos] = ceilingLights[y][flatData[spot]];
+                    screenData[pos] = colorMap[ceilingLights[y]][flatData[spot]];
                     pos++;
 
                     ceilingXFrac[y] = xFrac;
@@ -2090,11 +2089,11 @@ namespace ManagedDoom.Video
                     ceilingXFrac[y] = xFrac;
                     ceilingYFrac[y] = yFrac;
 
-                    var colorMap = planeLights[Math.Min((uint)(distance.Data >> zLightShift), maxZLight - 1)];
-                    ceilingLights[y] = colorMap;
+                    var mapIndex = planeLights[Math.Min((uint)(distance.Data >> zLightShift), maxZLight - 1)];
+                    ceilingLights[y] = mapIndex;
 
                     var spot = ((yFrac.Data >> (16 - 6)) & (63 * 64)) + ((xFrac.Data >> 16) & 63);
-                    screenData[pos] = colorMap[flatData[spot]];
+                    screenData[pos] = colorMap[mapIndex][flatData[spot]];
                     pos++;
                 }
             }
@@ -2115,11 +2114,127 @@ namespace ManagedDoom.Video
                     ceilingXFrac[y] = xFrac;
                     ceilingYFrac[y] = yFrac;
 
-                    var colorMap = planeLights[Math.Min((uint)(distance.Data >> zLightShift), maxZLight - 1)];
-                    ceilingLights[y] = colorMap;
+                    var mapIndex = planeLights[Math.Min((uint)(distance.Data >> zLightShift), maxZLight - 1)];
+                    ceilingLights[y] = mapIndex;
 
                     var spot = ((yFrac.Data >> (16 - 6)) & (63 * 64)) + ((xFrac.Data >> 16) & 63);
-                    screenData[pos] = colorMap[flatData[spot]];
+                    screenData[pos] = colorMap[mapIndex][flatData[spot]];
+                    pos++;
+                }
+            }
+
+            ceilingPrevSector = sector;
+            ceilingPrevX = x;
+            ceilingPrevY1 = y1;
+            ceilingPrevY2 = y2;
+        }
+        
+        private void DrawCeilingColumnTrueColor(
+            Sector sector,
+            Flat flat,
+            int[] planeLights,
+            int x,
+            int y1,
+            int y2,
+            Fixed ceilingHeight)
+        {
+            if (flat == flats.SkyFlat)
+            {
+                DrawSkyColumn(x, y1, y2);
+                return;
+            }
+
+            if (y2 - y1 < 0)
+            {
+                return;
+            }
+
+            var height = Fixed.Abs(ceilingHeight - viewZ);
+            var flatData = flat.Data;
+            var p1 = Math.Max(y1, ceilingPrevY1);
+            var p2 = Math.Min(y2, ceilingPrevY2);
+
+            if (sector == ceilingPrevSector && ceilingPrevX == x - 1 && p1 <= p2)
+            {
+                var pos = screenHeight * (windowX + x) + windowY + y1;
+
+                for (var y = y1; y < p1; y++)
+                {
+                    var distance = height * planeYSlope[y];
+                    ceilingXStep[y] = distance * planeBaseXScale;
+                    ceilingYStep[y] = distance * planeBaseYScale;
+
+                    var length = distance * planeDistScale[x];
+                    var angle = viewAngle + xToAngle[x];
+                    var xFrac = viewX + Trig.Cos(angle) * length;
+                    var yFrac = -viewY - Trig.Sin(angle) * length;
+                    ceilingXFrac[y] = xFrac;
+                    ceilingYFrac[y] = yFrac;
+
+                    var mapIndex = planeLights[Math.Min((uint)(distance.Data >> zLightShift), maxZLight - 1)];
+                    ceilingLights[y] = mapIndex;
+
+                    var spot = ((yFrac.Data >> (16 - 6)) & (63 * 64)) + ((xFrac.Data >> 16) & 63);
+                    trueColorData[pos] = trueColorMap[mapIndex][flatData[spot]];
+                    pos++;
+                }
+
+                for (var y = p1; y <= p2; y++)
+                {
+                    var xFrac = ceilingXFrac[y] + ceilingXStep[y];
+                    var yFrac = ceilingYFrac[y] + ceilingYStep[y];
+
+                    var spot = ((yFrac.Data >> (16 - 6)) & (63 * 64)) + ((xFrac.Data >> 16) & 63);
+                    trueColorData[pos] = trueColorMap[ceilingLights[y]][flatData[spot]];
+                    pos++;
+
+                    ceilingXFrac[y] = xFrac;
+                    ceilingYFrac[y] = yFrac;
+                }
+
+                for (var y = p2 + 1; y <= y2; y++)
+                {
+                    var distance = height * planeYSlope[y];
+                    ceilingXStep[y] = distance * planeBaseXScale;
+                    ceilingYStep[y] = distance * planeBaseYScale;
+
+                    var length = distance * planeDistScale[x];
+                    var angle = viewAngle + xToAngle[x];
+                    var xFrac = viewX + Trig.Cos(angle) * length;
+                    var yFrac = -viewY - Trig.Sin(angle) * length;
+                    ceilingXFrac[y] = xFrac;
+                    ceilingYFrac[y] = yFrac;
+
+                    var mapIndex = planeLights[Math.Min((uint)(distance.Data >> zLightShift), maxZLight - 1)];
+                    ceilingLights[y] = mapIndex;
+
+                    var spot = ((yFrac.Data >> (16 - 6)) & (63 * 64)) + ((xFrac.Data >> 16) & 63);
+                    trueColorData[pos] = trueColorMap[mapIndex][flatData[spot]];
+                    pos++;
+                }
+            }
+            else
+            {
+                var pos = screenHeight * (windowX + x) + windowY + y1;
+
+                for (var y = y1; y <= y2; y++)
+                {
+                    var distance = height * planeYSlope[y];
+                    ceilingXStep[y] = distance * planeBaseXScale;
+                    ceilingYStep[y] = distance * planeBaseYScale;
+
+                    var length = distance * planeDistScale[x];
+                    var angle = viewAngle + xToAngle[x];
+                    var xFrac = viewX + Trig.Cos(angle) * length;
+                    var yFrac = -viewY - Trig.Sin(angle) * length;
+                    ceilingXFrac[y] = xFrac;
+                    ceilingYFrac[y] = yFrac;
+
+                    var mapIndex = planeLights[Math.Min((uint)(distance.Data >> zLightShift), maxZLight - 1)];
+                    ceilingLights[y] = mapIndex;
+
+                    var spot = ((yFrac.Data >> (16 - 6)) & (63 * 64)) + ((xFrac.Data >> 16) & 63);
+                    trueColorData[pos] = trueColorMap[mapIndex][flatData[spot]];
                     pos++;
                 }
             }
@@ -2130,10 +2245,22 @@ namespace ManagedDoom.Video
             ceilingPrevY2 = y2;
         }
 
-        private void DrawFloorColumn(
+        private void DrawFloorColumn(Sector sector, Flat flat, int[] planeLights, int x, int y1, int y2, Fixed floorHeight)
+        {
+            if (screen.ColorMode == ColorMode.TrueColor)
+            {
+                DrawFloorColumnTrueColor(sector, flat, planeLights, x, y1, y2, floorHeight);
+            }
+            else
+            {
+                DrawFloorColumnIndexed(sector, flat, planeLights, x, y1, y2, floorHeight);
+            }
+        }
+        
+        private void DrawFloorColumnIndexed(
             Sector sector,
             Flat flat,
-            byte[][] planeLights,
+            int[] planeLights,
             int x,
             int y1,
             int y2,
@@ -2172,11 +2299,11 @@ namespace ManagedDoom.Video
                     floorXFrac[y] = xFrac;
                     floorYFrac[y] = yFrac;
 
-                    var colorMap = planeLights[Math.Min((uint)(distance.Data >> zLightShift), maxZLight - 1)];
-                    floorLights[y] = colorMap;
+                    var mapIndex = planeLights[Math.Min((uint)(distance.Data >> zLightShift), maxZLight - 1)];
+                    floorLights[y] = mapIndex;
 
                     var spot = ((yFrac.Data >> (16 - 6)) & (63 * 64)) + ((xFrac.Data >> 16) & 63);
-                    screenData[pos] = colorMap[flatData[spot]];
+                    screenData[pos] = colorMap[mapIndex][flatData[spot]];
                     pos++;
                 }
 
@@ -2186,7 +2313,7 @@ namespace ManagedDoom.Video
                     var yFrac = floorYFrac[y] + floorYStep[y];
 
                     var spot = ((yFrac.Data >> (16 - 6)) & (63 * 64)) + ((xFrac.Data >> 16) & 63);
-                    screenData[pos] = floorLights[y][flatData[spot]];
+                    screenData[pos] = colorMap[floorLights[y]][flatData[spot]];
                     pos++;
 
                     floorXFrac[y] = xFrac;
@@ -2206,11 +2333,11 @@ namespace ManagedDoom.Video
                     floorXFrac[y] = xFrac;
                     floorYFrac[y] = yFrac;
 
-                    var colorMap = planeLights[Math.Min((uint)(distance.Data >> zLightShift), maxZLight - 1)];
-                    floorLights[y] = colorMap;
+                    var mapIndex = planeLights[Math.Min((uint)(distance.Data >> zLightShift), maxZLight - 1)];
+                    floorLights[y] = mapIndex;
 
                     var spot = ((yFrac.Data >> (16 - 6)) & (63 * 64)) + ((xFrac.Data >> 16) & 63);
-                    screenData[pos] = colorMap[flatData[spot]];
+                    screenData[pos] = colorMap[mapIndex][flatData[spot]];
                     pos++;
                 }
             }
@@ -2231,11 +2358,127 @@ namespace ManagedDoom.Video
                     floorXFrac[y] = xFrac;
                     floorYFrac[y] = yFrac;
 
-                    var colorMap = planeLights[Math.Min((uint)(distance.Data >> zLightShift), maxZLight - 1)];
-                    floorLights[y] = colorMap;
+                    var mapIndex = planeLights[Math.Min((uint)(distance.Data >> zLightShift), maxZLight - 1)];
+                    floorLights[y] = mapIndex;
 
                     var spot = ((yFrac.Data >> (16 - 6)) & (63 * 64)) + ((xFrac.Data >> 16) & 63);
-                    screenData[pos] = colorMap[flatData[spot]];
+                    screenData[pos] = colorMap[mapIndex][flatData[spot]];
+                    pos++;
+                }
+            }
+
+            floorPrevSector = sector;
+            floorPrevX = x;
+            floorPrevY1 = y1;
+            floorPrevY2 = y2;
+        }
+        
+        private void DrawFloorColumnTrueColor(
+            Sector sector,
+            Flat flat,
+            int[] planeLights,
+            int x,
+            int y1,
+            int y2,
+            Fixed floorHeight)
+        {
+            if (flat == flats.SkyFlat)
+            {
+                DrawSkyColumn(x, y1, y2);
+                return;
+            }
+
+            if (y2 - y1 < 0)
+            {
+                return;
+            }
+
+            var height = Fixed.Abs(floorHeight - viewZ);
+            var flatData = flat.Data;
+            var p1 = Math.Max(y1, floorPrevY1);
+            var p2 = Math.Min(y2, floorPrevY2);
+
+            if (sector == floorPrevSector && floorPrevX == x - 1 && p1 <= p2)
+            {
+                var pos = screenHeight * (windowX + x) + windowY + y1;
+
+                for (var y = y1; y < p1; y++)
+                {
+                    var distance = height * planeYSlope[y];
+                    floorXStep[y] = distance * planeBaseXScale;
+                    floorYStep[y] = distance * planeBaseYScale;
+
+                    var length = distance * planeDistScale[x];
+                    var angle = viewAngle + xToAngle[x];
+                    var xFrac = viewX + Trig.Cos(angle) * length;
+                    var yFrac = -viewY - Trig.Sin(angle) * length;
+                    floorXFrac[y] = xFrac;
+                    floorYFrac[y] = yFrac;
+
+                    var mapIndex = planeLights[Math.Min((uint)(distance.Data >> zLightShift), maxZLight - 1)];
+                    floorLights[y] = mapIndex;
+
+                    var spot = ((yFrac.Data >> (16 - 6)) & (63 * 64)) + ((xFrac.Data >> 16) & 63);
+                    trueColorData[pos] = trueColorMap[mapIndex][flatData[spot]];
+                    pos++;
+                }
+
+                for (var y = p1; y <= p2; y++)
+                {
+                    var xFrac = floorXFrac[y] + floorXStep[y];
+                    var yFrac = floorYFrac[y] + floorYStep[y];
+
+                    var spot = ((yFrac.Data >> (16 - 6)) & (63 * 64)) + ((xFrac.Data >> 16) & 63);
+                    trueColorData[pos] = trueColorMap[floorLights[y]][flatData[spot]];
+                    pos++;
+
+                    floorXFrac[y] = xFrac;
+                    floorYFrac[y] = yFrac;
+                }
+
+                for (var y = p2 + 1; y <= y2; y++)
+                {
+                    var distance = height * planeYSlope[y];
+                    floorXStep[y] = distance * planeBaseXScale;
+                    floorYStep[y] = distance * planeBaseYScale;
+
+                    var length = distance * planeDistScale[x];
+                    var angle = viewAngle + xToAngle[x];
+                    var xFrac = viewX + Trig.Cos(angle) * length;
+                    var yFrac = -viewY - Trig.Sin(angle) * length;
+                    floorXFrac[y] = xFrac;
+                    floorYFrac[y] = yFrac;
+
+                    var mapIndex = planeLights[Math.Min((uint)(distance.Data >> zLightShift), maxZLight - 1)];
+                    floorLights[y] = mapIndex;
+
+                    var spot = ((yFrac.Data >> (16 - 6)) & (63 * 64)) + ((xFrac.Data >> 16) & 63);
+                    trueColorData[pos] = trueColorMap[floorLights[y]][flatData[spot]];
+                    pos++;
+                }
+            }
+            else
+            {
+                var pos = screenHeight * (windowX + x) + windowY + y1;
+
+                for (var y = y1; y <= y2; y++)
+                {
+                    var distance = height * planeYSlope[y];
+                    floorXStep[y] = distance * planeBaseXScale;
+                    floorYStep[y] = distance * planeBaseYScale;
+
+                    var length = distance * planeDistScale[x];
+                    var angle = viewAngle + xToAngle[x];
+                    var xFrac = viewX + Trig.Cos(angle) * length;
+                    var yFrac = -viewY - Trig.Sin(angle) * length;
+                    floorXFrac[y] = xFrac;
+                    floorYFrac[y] = yFrac;
+
+                    var mapIndex = planeLights[Math.Min((uint)(distance.Data >> zLightShift), maxZLight - 1)];
+                    floorLights[y] = mapIndex;
+
+                    var spot = ((yFrac.Data >> (16 - 6)) & (63 * 64)) + ((xFrac.Data >> 16) & 63);
+                    trueColorData[pos] = trueColorMap[mapIndex][flatData[spot]];
                     pos++;
                 }
             }
@@ -2248,90 +2491,129 @@ namespace ManagedDoom.Video
 
 
 
-        private void DrawColumn(
-            Column column,
-            byte[] map,
-            int x,
-            int y1,
-            int y2,
-            Fixed invScale,
-            Fixed textureAlt)
+        private void DrawColumn(Column column, int mapIndex, int x, int y1, int y2, Fixed invScale, Fixed textureAlt)
         {
-            if (y2 - y1 < 0)
+            if (screen.ColorMode == ColorMode.TrueColor)
+            {
+                DrawColumnTrueColor(column, mapIndex, x, y1, y2, invScale, textureAlt);
+            }
+            else
+            {
+                DrawColumnIndexed(column, mapIndex, x, y1, y2, invScale, textureAlt);
+            }
+        }
+        
+        private void DrawColumnIndexed(Column column, int mapIndex, int x, int y1, int y2, Fixed invScale, Fixed textureAlt)
+        {
+            if (y2 < y1)
             {
                 return;
             }
 
-            // Framebuffer destination address.
-            // Use ylookup LUT to avoid multiply with ScreenWidth.
-            // Use columnofs LUT for subwindows? 
             var pos1 = screenHeight * (windowX + x) + windowY + y1;
-            var pos2 = pos1 + (y2 - y1);
+            var pos2 = pos1 + y2 - y1;
 
-            // Determine scaling, which is the only mapping to be done.
             var fracStep = invScale;
             var frac = textureAlt + (y1 - centerY) * fracStep;
 
-            // Inner loop that does the actual texture mapping,
-            // e.g. a DDA-lile scaling.
-            // This is as fast as it gets.
             var source = column.Data;
             var offset = column.Offset;
+            var map = colorMap[mapIndex];
+
             for (var pos = pos1; pos <= pos2; pos++)
             {
-                // Re-map color indices from wall texture column
-                // using a lighting/special effects LUT.
                 screenData[pos] = map[source[offset + ((frac.Data >> Fixed.FracBits) & 127)]];
                 frac += fracStep;
             }
         }
 
-        private void DrawColumnTranslation(
-            Column column,
-            byte[] translation,
-            byte[] map,
-            int x,
-            int y1,
-            int y2,
-            Fixed invScale,
-            Fixed textureAlt)
+        private void DrawColumnTrueColor(Column column, int mapIndex, int x, int y1, int y2, Fixed invScale, Fixed textureAlt)
         {
-            if (y2 - y1 < 0)
+            if (y2 < y1)
             {
                 return;
             }
 
-            // Framebuffer destination address.
-            // Use ylookup LUT to avoid multiply with ScreenWidth.
-            // Use columnofs LUT for subwindows? 
             var pos1 = screenHeight * (windowX + x) + windowY + y1;
-            var pos2 = pos1 + (y2 - y1);
+            var pos2 = pos1 + y2 - y1;
 
-            // Determine scaling, which is the only mapping to be done.
             var fracStep = invScale;
             var frac = textureAlt + (y1 - centerY) * fracStep;
 
-            // Inner loop that does the actual texture mapping,
-            // e.g. a DDA-lile scaling.
-            // This is as fast as it gets.
             var source = column.Data;
             var offset = column.Offset;
+            var map = trueColorMap[mapIndex];
+
             for (var pos = pos1; pos <= pos2; pos++)
             {
-                // Re-map color indices from wall texture column
-                // using a lighting/special effects LUT.
+                trueColorData[pos] = map[source[offset + ((frac.Data >> Fixed.FracBits) & 127)]];
+                frac += fracStep;
+            }
+        }
+        
+        private void DrawColumnTranslation(Column column, byte[] translation, int mapIndex, int x, int y1, int y2, Fixed invScale, Fixed textureAlt)
+        {
+            if (screen.ColorMode == ColorMode.TrueColor)
+            {
+                DrawColumnTranslationTrueColor(column, translation, mapIndex, x, y1, y2, invScale, textureAlt);
+            }
+            else
+            {
+                DrawColumnTranslationIndexed(column, translation, mapIndex, x, y1, y2, invScale, textureAlt);
+            }
+        }
+
+        private void DrawColumnTranslationIndexed(Column column, byte[] translation, int mapIndex, int x, int y1, int y2, Fixed invScale, Fixed textureAlt)
+        {
+            if (y2 < y1)
+            {
+                return;
+            }
+
+            var pos1 = screenHeight * (windowX + x) + windowY + y1;
+            var pos2 = pos1 + y2 - y1;
+
+            var fracStep = invScale;
+            var frac = textureAlt + (y1 - centerY) * fracStep;
+
+            var source = column.Data;
+            var offset = column.Offset;
+            var map = colorMap[mapIndex];
+
+            for (var pos = pos1; pos <= pos2; pos++)
+            {
                 screenData[pos] = map[translation[source[offset + ((frac.Data >> Fixed.FracBits) & 127)]]];
                 frac += fracStep;
             }
         }
 
-        private void DrawFuzzColumn(
-            Column column,
-            int x,
-            int y1,
-            int y2)
+        private void DrawColumnTranslationTrueColor(Column column, byte[] translation, int mapIndex, int x, int y1, int y2, Fixed invScale, Fixed textureAlt)
         {
-            if (y2 - y1 < 0)
+            if (y2 < y1)
+            {
+                return;
+            }
+
+            var pos1 = screenHeight * (windowX + x) + windowY + y1;
+            var pos2 = pos1 + y2 - y1;
+
+            var fracStep = invScale;
+            var frac = textureAlt + (y1 - centerY) * fracStep;
+
+            var source = column.Data;
+            var offset = column.Offset;
+            var map = trueColorMap[mapIndex];
+
+            for (var pos = pos1; pos <= pos2; pos++)
+            {
+                trueColorData[pos] = map[translation[source[offset + ((frac.Data >> Fixed.FracBits) & 127)]]];
+                frac += fracStep;
+            }
+        }
+        
+        private void DrawFuzzColumn(int x, int y1, int y2)
+        {
+            if (y2 < y1)
             {
                 return;
             }
@@ -2347,16 +2629,32 @@ namespace ManagedDoom.Video
             }
 
             var pos1 = screenHeight * (windowX + x) + windowY + y1;
-            var pos2 = pos1 + (y2 - y1);
+            var pos2 = pos1 + y2 - y1;
 
-            var map = colorMap[6];
-            for (var pos = pos1; pos <= pos2; pos++)
+            if (screen.ColorMode == ColorMode.TrueColor)
             {
-                screenData[pos] = map[screenData[pos + fuzzTable[fuzzPos]]];
-
-                if (++fuzzPos == fuzzTable.Length)
+                for (var pos = pos1; pos <= pos2; pos++)
                 {
-                    fuzzPos = 0;
+                    trueColorData[pos] = trueColorMap.ApplyLight(trueColorData[pos + fuzzTable[fuzzPos]], 6);
+
+                    if (++fuzzPos == fuzzTable.Length)
+                    {
+                        fuzzPos = 0;
+                    }
+                }
+            }
+            else
+            {
+                var map = colorMap[6];
+
+                for (var pos = pos1; pos <= pos2; pos++)
+                {
+                    screenData[pos] = map[screenData[pos + fuzzTable[fuzzPos]]];
+
+                    if (++fuzzPos == fuzzTable.Length)
+                    {
+                        fuzzPos = 0;
+                    }
                 }
             }
         }
@@ -2366,12 +2664,12 @@ namespace ManagedDoom.Video
             var angle = (viewAngle + xToAngle[x]).Data >> angleToSkyShift;
             var mask = world.Map.SkyTexture.Width - 1;
             var source = world.Map.SkyTexture.Composite.Columns[angle & mask];
-            DrawColumn(source[0], colorMap[0], x, y1, y2, skyInvScale, skyTextureAlt);
+            DrawColumn(source[0], 0, x, y1, y2, skyInvScale, skyTextureAlt);
         }
 
         private void DrawMaskedColumn(
             Column[] columns,
-            byte[] map,
+            int mapIndex,
             int x,
             Fixed topY,
             Fixed scale,
@@ -2393,7 +2691,7 @@ namespace ManagedDoom.Video
                 if (y1 <= y2)
                 {
                     var alt = new Fixed(textureAlt.Data - (column.TopDelta << Fixed.FracBits));
-                    DrawColumn(column, map, x, y1, y2, invScale, alt);
+                    DrawColumn(column, mapIndex, x, y1, y2, invScale, alt);
                 }
             }
         }
@@ -2401,7 +2699,7 @@ namespace ManagedDoom.Video
         private void DrawMaskedColumnTranslation(
             Column[] columns,
             byte[] translation,
-            byte[] map,
+            int mapIndex,
             int x,
             Fixed topY,
             Fixed scale,
@@ -2423,7 +2721,7 @@ namespace ManagedDoom.Video
                 if (y1 <= y2)
                 {
                     var alt = new Fixed(textureAlt.Data - (column.TopDelta << Fixed.FracBits));
-                    DrawColumnTranslation(column, translation, map, x, y1, y2, invScale, alt);
+                    DrawColumnTranslation(column, translation, mapIndex, x, y1, y2, invScale, alt);
                 }
             }
         }
@@ -2448,7 +2746,7 @@ namespace ManagedDoom.Video
 
                 if (y1 <= y2)
                 {
-                    DrawFuzzColumn(column, x, y1, y2);
+                    DrawFuzzColumn(x, y1, y2);
                 }
             }
         }
@@ -2478,7 +2776,7 @@ namespace ManagedDoom.Video
             }
         }
 
-        private void ProjectSprite(Mobj thing, byte[][] spriteLights)
+        private void ProjectSprite(Mobj thing, int[] spriteLights)
         {
             if (visSpriteCount == visSprites.Length)
             {
@@ -2599,12 +2897,12 @@ namespace ManagedDoom.Video
                 }
                 else
                 {
-                    vis.ColorMap = colorMap.FullBright;
+                    vis.ColorMap = 0;
                 }
             }
             else
             {
-                vis.ColorMap = colorMap[fixedColorMap];
+                vis.ColorMap = fixedColorMap;
             }
         }
 
@@ -2734,7 +3032,7 @@ namespace ManagedDoom.Video
 
 
 
-        private void DrawPlayerSprite(PlayerSpriteDef psp, byte[][] spriteLights, bool fuzz)
+        private void DrawPlayerSprite(PlayerSpriteDef psp, int[] spriteLights, bool fuzz)
         {
             // Decide which patch to use.
             var spriteDef = sprites[psp.State.Sprite];
@@ -2799,12 +3097,12 @@ namespace ManagedDoom.Video
                 }
                 else
                 {
-                    vis.ColorMap = colorMap.FullBright;
+                    vis.ColorMap = 0;
                 }
             }
             else
             {
-                vis.ColorMap = colorMap[fixedColorMap];
+                vis.ColorMap = fixedColorMap;
             }
 
             if (fuzz)
@@ -2851,7 +3149,7 @@ namespace ManagedDoom.Video
             // Get light level.
             var spriteLightLevel = (player.Mobj.Subsector.Sector.LightLevel >> lightSegShift) + extraLight;
 
-            byte[][] spriteLights;
+            int[] spriteLights;
             if (spriteLightLevel < 0)
             {
                 spriteLights = scaleLight[0];
@@ -3142,7 +3440,7 @@ namespace ManagedDoom.Video
             public Patch Patch;
 
             // For color translation and shadow draw.
-            public byte[] ColorMap;
+            public int ColorMap;
 
             public MobjFlags MobjFlags;
         }

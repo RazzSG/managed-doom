@@ -29,6 +29,7 @@ namespace ManagedDoom.Video
         public int WindowSize { get; set; }
 
         public bool DisplayMessage { get; set; }
+        public ColorMode ColorMode { get; set; }
         
         public bool Crosshair { get; set; }
         public int CrosshairType { get; set; }
