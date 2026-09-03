@@ -228,7 +228,7 @@ namespace ManagedDoom
                     215,
                     () => video.CrosshairColor,
                     value => video.CrosshairColor = value));
-            
+
             optionMenu = new SelectableMenu(
                 this,
                 "M_OPTTTL", 108, 15,
@@ -250,18 +250,6 @@ namespace ManagedDoom
                     video.MaxWindowSize + 1,
                     () => video.WindowSize,
                     size => video.WindowSize = size),
-                
-                new ChoiceMenuItem(
-                    "COLOR MODE",
-                    28, 80,
-                    60, 85,
-                    [
-                        "CLASSIC",
-                        "TRUE COLOR"
-                    ],
-                    215,
-                    () => (int)video.ColorMode,
-                    value => video.ColorMode = (Video.ColorMode)value),
 
                 new SliderMenuItem(
                     "M_MSENS", 28, 112 - 16, 60, 117 - 16,
@@ -275,7 +263,16 @@ namespace ManagedDoom
                     volume),
                 new TextMenuItem(
                     "CROSSHAIR", 28, 145, 60, 165,
-                    crosshairMenu));
+                    crosshairMenu),
+                
+                new ChoiceMenuItem(
+                    "COLOR MODE",
+                    28, 165,
+                    60, 185,
+                    ["CLASSIC", "TRUE COLOR"],
+                    190,
+                    () => (int) video.ColorMode,
+                    value => video.ColorMode = (Video.ColorMode) value));
 
             load = new LoadMenu(
                 this,

@@ -230,8 +230,10 @@ namespace ManagedDoom.Video
 
         private Fixed[] planeYSlope;
         private Fixed[] planeDistScale;
-        private Fixed planeBaseXScale;
-        private Fixed planeBaseYScale;
+        // private Fixed planeBaseXScale;
+        // private Fixed planeBaseYScale;
+        private Fixed planeBaseX;
+        private Fixed planeBaseY;
 
         private Sector ceilingPrevSector;
         private int ceilingPrevX;
@@ -288,8 +290,8 @@ namespace ManagedDoom.Video
         private void ClearPlaneRendering()
         {
             var angle = viewAngle - Angle.Ang90;
-            planeBaseXScale = Trig.Cos(angle) / centerXFrac;
-            planeBaseYScale = -(Trig.Sin(angle) / centerXFrac);
+            planeBaseX = Trig.Cos(angle);
+            planeBaseY = -Trig.Sin(angle);
 
             ceilingPrevSector = null;
             ceilingPrevX = int.MaxValue;
@@ -1257,17 +1259,9 @@ namespace ManagedDoom.Video
 
             var rwNormalAngle = seg.Angle + Angle.Ang90;
 
-            var offsetAngle = Angle.Abs(rwNormalAngle - rwAngle1);
-            if (offsetAngle > Angle.Ang90)
-            {
-                offsetAngle = Angle.Ang90;
-            }
-
-            var distAngle = Angle.Ang90 - offsetAngle;
-
             var hypotenuse = Geometry.PointToDist(viewX, viewY, seg.Vertex1.X, seg.Vertex1.Y);
 
-            var rwDistance = hypotenuse * Trig.Sin(distAngle);
+            var rwDistance = RenderMath.GetWallDistance(viewX, viewY, seg.Vertex1.X, seg.Vertex1.Y, seg.Vertex2.X, seg.Vertex2.Y);
 
             var rwScale = ScaleFromGlobalAngle(viewAngle + xToAngle[x1], viewAngle, rwNormalAngle, rwDistance);
 
@@ -1565,17 +1559,9 @@ namespace ManagedDoom.Video
 
             var rwNormalAngle = seg.Angle + Angle.Ang90;
 
-            var offsetAngle = Angle.Abs(rwNormalAngle - rwAngle1);
-            if (offsetAngle > Angle.Ang90)
-            {
-                offsetAngle = Angle.Ang90;
-            }
-
-            var distAngle = Angle.Ang90 - offsetAngle;
-
             var hypotenuse = Geometry.PointToDist(viewX, viewY, seg.Vertex1.X, seg.Vertex1.Y);
 
-            var rwDistance = hypotenuse * Trig.Sin(distAngle);
+            var rwDistance = RenderMath.GetWallDistance(viewX, viewY, seg.Vertex1.X, seg.Vertex1.Y, seg.Vertex2.X, seg.Vertex2.Y);
 
             var rwScale = ScaleFromGlobalAngle(viewAngle + xToAngle[x1], viewAngle, rwNormalAngle, rwDistance);
 
@@ -2045,8 +2031,8 @@ namespace ManagedDoom.Video
                 for (var y = y1; y < p1; y++)
                 {
                     var distance = height * planeYSlope[y];
-                    ceilingXStep[y] = distance * planeBaseXScale;
-                    ceilingYStep[y] = distance * planeBaseYScale;
+                    ceilingXStep[y] = RenderMath.GetPlaneStep(distance, planeBaseX, centerXFrac);
+                    ceilingYStep[y] = RenderMath.GetPlaneStep(distance, planeBaseY, centerXFrac);
 
                     var length = distance * planeDistScale[x];
                     var angle = viewAngle + xToAngle[x];
@@ -2079,8 +2065,8 @@ namespace ManagedDoom.Video
                 for (var y = p2 + 1; y <= y2; y++)
                 {
                     var distance = height * planeYSlope[y];
-                    ceilingXStep[y] = distance * planeBaseXScale;
-                    ceilingYStep[y] = distance * planeBaseYScale;
+                    ceilingXStep[y] = RenderMath.GetPlaneStep(distance, planeBaseX, centerXFrac);
+                    ceilingYStep[y] = RenderMath.GetPlaneStep(distance, planeBaseY, centerXFrac);
 
                     var length = distance * planeDistScale[x];
                     var angle = viewAngle + xToAngle[x];
@@ -2104,8 +2090,8 @@ namespace ManagedDoom.Video
                 for (var y = y1; y <= y2; y++)
                 {
                     var distance = height * planeYSlope[y];
-                    ceilingXStep[y] = distance * planeBaseXScale;
-                    ceilingYStep[y] = distance * planeBaseYScale;
+                    ceilingXStep[y] = RenderMath.GetPlaneStep(distance, planeBaseX, centerXFrac);
+                    ceilingYStep[y] = RenderMath.GetPlaneStep(distance, planeBaseY, centerXFrac);
 
                     var length = distance * planeDistScale[x];
                     var angle = viewAngle + xToAngle[x];
@@ -2161,8 +2147,8 @@ namespace ManagedDoom.Video
                 for (var y = y1; y < p1; y++)
                 {
                     var distance = height * planeYSlope[y];
-                    ceilingXStep[y] = distance * planeBaseXScale;
-                    ceilingYStep[y] = distance * planeBaseYScale;
+                    ceilingXStep[y] = RenderMath.GetPlaneStep(distance, planeBaseX, centerXFrac);
+                    ceilingYStep[y] = RenderMath.GetPlaneStep(distance, planeBaseY, centerXFrac);
 
                     var length = distance * planeDistScale[x];
                     var angle = viewAngle + xToAngle[x];
@@ -2195,8 +2181,8 @@ namespace ManagedDoom.Video
                 for (var y = p2 + 1; y <= y2; y++)
                 {
                     var distance = height * planeYSlope[y];
-                    ceilingXStep[y] = distance * planeBaseXScale;
-                    ceilingYStep[y] = distance * planeBaseYScale;
+                    ceilingXStep[y] = RenderMath.GetPlaneStep(distance, planeBaseX, centerXFrac);
+                    ceilingYStep[y] = RenderMath.GetPlaneStep(distance, planeBaseY, centerXFrac);
 
                     var length = distance * planeDistScale[x];
                     var angle = viewAngle + xToAngle[x];
@@ -2220,8 +2206,8 @@ namespace ManagedDoom.Video
                 for (var y = y1; y <= y2; y++)
                 {
                     var distance = height * planeYSlope[y];
-                    ceilingXStep[y] = distance * planeBaseXScale;
-                    ceilingYStep[y] = distance * planeBaseYScale;
+                    ceilingXStep[y] = RenderMath.GetPlaneStep(distance, planeBaseX, centerXFrac);
+                    ceilingYStep[y] = RenderMath.GetPlaneStep(distance, planeBaseY, centerXFrac);
 
                     var length = distance * planeDistScale[x];
                     var angle = viewAngle + xToAngle[x];
@@ -2289,8 +2275,8 @@ namespace ManagedDoom.Video
                 for (var y = y1; y < p1; y++)
                 {
                     var distance = height * planeYSlope[y];
-                    floorXStep[y] = distance * planeBaseXScale;
-                    floorYStep[y] = distance * planeBaseYScale;
+                    floorXStep[y] = RenderMath.GetPlaneStep(distance, planeBaseX, centerXFrac);
+                    floorYStep[y] = RenderMath.GetPlaneStep(distance, planeBaseY, centerXFrac);
 
                     var length = distance * planeDistScale[x];
                     var angle = viewAngle + xToAngle[x];
@@ -2323,8 +2309,8 @@ namespace ManagedDoom.Video
                 for (var y = p2 + 1; y <= y2; y++)
                 {
                     var distance = height * planeYSlope[y];
-                    floorXStep[y] = distance * planeBaseXScale;
-                    floorYStep[y] = distance * planeBaseYScale;
+                    floorXStep[y] = RenderMath.GetPlaneStep(distance, planeBaseX, centerXFrac);
+                    floorYStep[y] = RenderMath.GetPlaneStep(distance, planeBaseY, centerXFrac);
 
                     var length = distance * planeDistScale[x];
                     var angle = viewAngle + xToAngle[x];
@@ -2348,8 +2334,8 @@ namespace ManagedDoom.Video
                 for (var y = y1; y <= y2; y++)
                 {
                     var distance = height * planeYSlope[y];
-                    floorXStep[y] = distance * planeBaseXScale;
-                    floorYStep[y] = distance * planeBaseYScale;
+                    floorXStep[y] = RenderMath.GetPlaneStep(distance, planeBaseX, centerXFrac);
+                    floorYStep[y] = RenderMath.GetPlaneStep(distance, planeBaseY, centerXFrac);
 
                     var length = distance * planeDistScale[x];
                     var angle = viewAngle + xToAngle[x];
@@ -2405,8 +2391,8 @@ namespace ManagedDoom.Video
                 for (var y = y1; y < p1; y++)
                 {
                     var distance = height * planeYSlope[y];
-                    floorXStep[y] = distance * planeBaseXScale;
-                    floorYStep[y] = distance * planeBaseYScale;
+                    floorXStep[y] = RenderMath.GetPlaneStep(distance, planeBaseX, centerXFrac);
+                    floorYStep[y] = RenderMath.GetPlaneStep(distance, planeBaseY, centerXFrac);
 
                     var length = distance * planeDistScale[x];
                     var angle = viewAngle + xToAngle[x];
@@ -2439,8 +2425,8 @@ namespace ManagedDoom.Video
                 for (var y = p2 + 1; y <= y2; y++)
                 {
                     var distance = height * planeYSlope[y];
-                    floorXStep[y] = distance * planeBaseXScale;
-                    floorYStep[y] = distance * planeBaseYScale;
+                    floorXStep[y] = RenderMath.GetPlaneStep(distance, planeBaseX, centerXFrac);
+                    floorYStep[y] = RenderMath.GetPlaneStep(distance, planeBaseY, centerXFrac);
 
                     var length = distance * planeDistScale[x];
                     var angle = viewAngle + xToAngle[x];
@@ -2464,8 +2450,8 @@ namespace ManagedDoom.Video
                 for (var y = y1; y <= y2; y++)
                 {
                     var distance = height * planeYSlope[y];
-                    floorXStep[y] = distance * planeBaseXScale;
-                    floorYStep[y] = distance * planeBaseYScale;
+                    floorXStep[y] = RenderMath.GetPlaneStep(distance, planeBaseX, centerXFrac);
+                    floorYStep[y] = RenderMath.GetPlaneStep(distance, planeBaseY, centerXFrac);
 
                     var length = distance * planeDistScale[x];
                     var angle = viewAngle + xToAngle[x];
