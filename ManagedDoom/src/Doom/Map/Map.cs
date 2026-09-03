@@ -199,36 +199,32 @@ namespace ManagedDoom
 
         private Texture GetSkyTextureByMapName(string name)
         {
-            if (name.Length == 4)
+            if (EpisodeCatalog.TryParseMapName(name, out var episode, out _))
             {
-                switch (name[1])
-                {
-                    case '1':
-                        return textures["SKY1"];
-                    case '2':
-                        return textures["SKY2"];
-                    case '3':
-                        return textures["SKY3"];
-                    default:
-                        return textures["SKY4"];
-                }
+                var skyName = $"SKY{episode}";
+
+                if (textures.GetNumber(skyName) != -1)
+                    return textures[skyName];
+
+                var compatibilitySkyName = $"SKY{episode}_ZD";
+
+                if (textures.GetNumber(compatibilitySkyName) != -1)
+                    return textures[compatibilitySkyName];
+
+                return textures.GetNumber("SKY4") != -1 ?
+                    textures["SKY4"] :
+                    textures["SKY1"];
             }
-            else
-            {
-                var number = int.Parse(name.Substring(3));
-                if (number <= 11)
-                {
-                    return textures["SKY1"];
-                }
-                else if (number <= 21)
-                {
-                    return textures["SKY2"];
-                }
-                else
-                {
-                    return textures["SKY3"];
-                }
-            }
+
+            var number = int.Parse(name.Substring(3));
+
+            if (number <= 11)
+                return textures["SKY1"];
+
+            if (number <= 21)
+                return textures["SKY2"];
+
+            return textures["SKY3"];
         }
 
         public ITextureLookup Textures => textures;
@@ -266,24 +262,20 @@ namespace ManagedDoom
 
         public static Bgm GetMapBgm(GameOptions options)
         {
-            Bgm bgm;
             if (options.GameMode == GameMode.Commercial)
-            {
-                bgm = Bgm.RUNNIN + options.Map - 1;
-            }
-            else
-            {
-                if (options.Episode < 4)
-                {
-                    bgm = Bgm.E1M1 + (options.Episode - 1) * 9 + options.Map - 1;
-                }
-                else
-                {
-                    bgm = e4BgmList[options.Map - 1];
-                }
-            }
+                return Bgm.RUNNIN + options.Map - 1;
 
-            return bgm;
+            if (options.Episode >= 1 && options.Episode <= 3 && options.Map >= 1 && options.Map <= 9)
+                return Bgm.E1M1 + (options.Episode - 1) * 9 + options.Map - 1;
+
+            if (options.Episode == 4 && options.Map >= 1 && options.Map <= e4BgmList.Length)
+                return e4BgmList[options.Map - 1];
+
+            // Bgm is a legacy enum and cannot represent arbitrary D_E#M# lumps yet.
+            // Custom episodes therefore use a stable non-crashing fallback until the
+            // music backend is extended to accept lump names directly.
+            var fallbackMap = Math.Clamp(options.Map, 1, 9);
+            return Bgm.E1M1 + fallbackMap - 1;
         }
     }
 }

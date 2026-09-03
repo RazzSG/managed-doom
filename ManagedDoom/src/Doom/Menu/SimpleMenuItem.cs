@@ -26,6 +26,7 @@ namespace ManagedDoom
         private int itemY;
         private Action action;
         private Func<bool> selectable;
+        private string fallbackText;
 
         public SimpleMenuItem(
             string name,
@@ -39,6 +40,23 @@ namespace ManagedDoom
             this.itemY = itemY;
             this.action = action;
             this.selectable = null;
+            fallbackText = null;
+        }
+
+        public SimpleMenuItem(
+            string name,
+            string fallbackText,
+            int skullX, int skullY,
+            int itemX, int itemY,
+            Action action, MenuDef next)
+            : base(skullX, skullY, next)
+        {
+            this.name = name;
+            this.fallbackText = fallbackText;
+            this.itemX = itemX;
+            this.itemY = itemY;
+            this.action = action;
+            selectable = null;
         }
 
         public SimpleMenuItem(
@@ -53,9 +71,11 @@ namespace ManagedDoom
             this.itemY = itemY;
             this.action = action;
             this.selectable = selectable;
+            fallbackText = null;
         }
 
         public string Name => name;
+        public string FallbackText => fallbackText;
         public int ItemX => itemX;
         public int ItemY => itemY;
         public Action Action => action;

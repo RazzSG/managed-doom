@@ -195,7 +195,7 @@ namespace ManagedDoom
                 return;
             }
 
-            if (info.Episode > 2)
+            if ((uint)info.Episode >= (uint)AnimationInfo.Episodes.Count)
             {
                 return;
             }
@@ -754,7 +754,7 @@ namespace ManagedDoom
                 return;
             }
 
-            if (info.Episode > 2)
+            if ((uint)info.Episode >= (uint)AnimationInfo.Episodes.Count)
             {
                 return;
             }

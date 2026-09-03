@@ -1672,12 +1672,9 @@ namespace ManagedDoom
                         break;
 
                     default:
-                        if (options.Map != 8)
-                        {
-                            return;
-                        }
-
-                        break;
+                        // Vanilla boss-death rules are episode-specific.
+                        // Custom episodes must not inherit E1-E4 boss actions by accident.
+                        return;
                 }
             }
 

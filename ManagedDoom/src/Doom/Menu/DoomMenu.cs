@@ -33,7 +33,6 @@ namespace ManagedDoom
         private SaveMenu save;
         private HelpScreen help;
 
-        private PressAnyKey thisIsShareware;
         private PressAnyKey saveFailed;
         private YesNoConfirm nightmareConfirm;
         private YesNoConfirm endGameConfirm;
@@ -52,11 +51,6 @@ namespace ManagedDoom
         public DoomMenu(Doom doom)
         {
             this.doom = doom;
-
-            thisIsShareware = new PressAnyKey(
-                this,
-                DoomInfo.Strings.SWSTRING,
-                null);
 
             saveFailed = new PressAnyKey(
                 this,
@@ -108,77 +102,38 @@ namespace ManagedDoom
                     null,
                     nightmareConfirm));
 
-            if (doom.Options.GameMode == GameMode.Retail)
+            if (doom.Options.GameMode != GameMode.Commercial)
             {
+                var episodes = EpisodeCatalog.GetEpisodes(doom.Content.Wad);
+
+                if (episodes.Count == 0)
+                    throw new InvalidOperationException("No Doom episode maps were found in the loaded WAD set.");
+
+                selectedEpisode = episodes[0];
+
+                var episodeItems = new MenuItem[episodes.Count];
+                var spacing = episodes.Count <= 5 ? 16 : Math.Max(8, 64 / Math.Max(1, episodes.Count - 1));
+
+                for (var i = 0; i < episodes.Count; i++)
+                {
+                    var episode = episodes[i];
+                    var skullY = 58 + i * spacing;
+                    var itemY = skullY + 5;
+
+                    episodeItems[i] = new SimpleMenuItem(
+                        $"M_EPI{episode}",
+                        $"EPISODE {episode}",
+                        16, skullY,
+                        48, itemY,
+                        () => selectedEpisode = episode,
+                        skillMenu);
+                }
+
                 episodeMenu = new SelectableMenu(
                     this,
                     "M_EPISOD", 54, 38,
                     0,
-
-                    new SimpleMenuItem(
-                        "M_EPI1", 16, 58, 48, 63,
-                        () => selectedEpisode = 1,
-                        skillMenu),
-
-                    new SimpleMenuItem(
-                        "M_EPI2", 16, 74, 48, 79,
-                        () => selectedEpisode = 2,
-                        skillMenu),
-
-                    new SimpleMenuItem(
-                        "M_EPI3", 16, 90, 48, 95,
-                        () => selectedEpisode = 3,
-                        skillMenu),
-
-                    new SimpleMenuItem(
-                        "M_EPI4", 16, 106, 48, 111,
-                        () => selectedEpisode = 4,
-                        skillMenu));
-            }
-            else
-            {
-                if (doom.Options.GameMode == GameMode.Shareware)
-                {
-                    episodeMenu = new SelectableMenu(
-                        this,
-                        "M_EPISOD", 54, 38,
-                        0,
-
-                        new SimpleMenuItem(
-                            "M_EPI1", 16, 58, 48, 63,
-                            () => selectedEpisode = 1,
-                            skillMenu),
-
-                        new SimpleMenuItem(
-                            "M_EPI2", 16, 74, 48, 79,
-                            null,
-                            thisIsShareware),
-
-                        new SimpleMenuItem(
-                            "M_EPI3", 16, 90, 48, 95,
-                            null,
-                            thisIsShareware));
-                }
-                else
-                {
-                    episodeMenu = new SelectableMenu(
-                        this,
-                        "M_EPISOD", 54, 38,
-                        0,
-
-                        new SimpleMenuItem(
-                            "M_EPI1", 16, 58, 48, 63,
-                            () => selectedEpisode = 1,
-                            skillMenu),
-                        new SimpleMenuItem(
-                            "M_EPI2", 16, 74, 48, 79,
-                            () => selectedEpisode = 2,
-                            skillMenu),
-                        new SimpleMenuItem(
-                            "M_EPI3", 16, 90, 48, 95,
-                            () => selectedEpisode = 3,
-                            skillMenu));
-                }
+                    episodeItems);
             }
 
             var sound = doom.Options.Sound;
@@ -373,7 +328,6 @@ namespace ManagedDoom
 
             tics = 0;
 
-            selectedEpisode = 1;
 
             saveSlots = new SaveSlots();
         }

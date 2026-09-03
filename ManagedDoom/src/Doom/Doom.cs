@@ -550,6 +550,7 @@ namespace ManagedDoom
         public DoomGame Game => game;
         public DoomMenu Menu => menu;
         public WipeEffect WipeEffect => wipeEffect;
+        public GameContent Content => content;
         public bool Wiping => wiping;
         public string QuitMessage => quitMessage;
     }

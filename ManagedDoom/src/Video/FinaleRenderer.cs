@@ -73,6 +73,10 @@ namespace ManagedDoom.Video
                     case 4:
                         DrawPatch("ENDPIC", 0, 0);
                         break;
+
+                    default:
+                        DrawPatch(wad.GetLumpNumber("ENDPIC") != -1 ? "ENDPIC" : "CREDIT", 0, 0);
+                        break;
                 }
             }
         }

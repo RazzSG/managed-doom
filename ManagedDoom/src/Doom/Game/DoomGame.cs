@@ -29,6 +29,7 @@ namespace ManagedDoom
 		private GameState gameState;
 
 		private int gameTic;
+		private int secretExitReturnMap;
 
 		private World world;
 		private Intermission intermission;
@@ -48,6 +49,7 @@ namespace ManagedDoom
 			gameAction = GameAction.Nothing;
 
 			gameTic = 0;
+			secretExitReturnMap = 0;
 		}
 
 
@@ -412,27 +414,30 @@ namespace ManagedDoom
 			{
 				if (world.SecretExit)
 				{
-					// Go to secret level.
+					// Classic Doom-family secret maps use M9. Remember the actual
+					// source's normal successor so custom episodes (for example E5)
+					// do not need an episode-number switch.
+					secretExitReturnMap = EpisodeCatalog.FindNextMap(content.Wad, options.Episode, options.Map);
+					if (secretExitReturnMap == -1)
+						secretExitReturnMap = options.Map + 1;
+
 					imInfo.NextLevel = 8;
 				}
 				else if (options.Map == 9)
 				{
-					// Returning from secret level.
-					switch (options.Episode)
-					{
-						case 1:
-							imInfo.NextLevel = 3;
-							break;
-						case 2:
-							imInfo.NextLevel = 5;
-							break;
-						case 3:
-							imInfo.NextLevel = 6;
-							break;
-						case 4:
-							imInfo.NextLevel = 2;
-							break;
-					}
+					var returnMap = secretExitReturnMap;
+
+					if (returnMap <= 0 || !EpisodeCatalog.HasMap(content.Wad, options.Episode, returnMap))
+						returnMap = EpisodeCatalog.FindSecretReturnMap(content.Wad, options.Episode);
+
+					if (returnMap <= 0)
+						returnMap = EpisodeCatalog.FindFirstMap(content.Wad, options.Episode);
+
+					if (returnMap <= 0)
+						throw new InvalidDataException($"Could not determine the secret-level return map for episode {options.Episode}.");
+
+					imInfo.NextLevel = returnMap - 1;
+					secretExitReturnMap = 0;
 				}
 				else
 				{
@@ -445,14 +450,7 @@ namespace ManagedDoom
 			imInfo.MaxItemCount = world.TotalItems;
 			imInfo.MaxSecretCount = world.TotalSecrets;
 			imInfo.TotalFrags = 0;
-			if (options.GameMode == GameMode.Commercial)
-			{
-				imInfo.ParTime = 35 * DoomInfo.ParTimes.Doom2[options.Map - 1];
-			}
-			else
-			{
-				imInfo.ParTime = 35 * DoomInfo.ParTimes.Doom1[options.Episode - 1][options.Map - 1];
-			}
+			imInfo.ParTime = GetParTime(options);
 
 			var players = options.Players;
 			for (var i = 0; i < Player.MaxPlayerCount; i++)
@@ -467,6 +465,24 @@ namespace ManagedDoom
 
 			gameState = GameState.Intermission;
 			intermission = new Intermission(options, imInfo);
+		}
+
+		private static int GetParTime(GameOptions options)
+		{
+			if (options.GameMode == GameMode.Commercial)
+			{
+				var map = options.Map - 1;
+				return (uint)map < (uint)DoomInfo.ParTimes.Doom2.Count ? 35 * DoomInfo.ParTimes.Doom2[map] : 0;
+			}
+
+			var episode = options.Episode - 1;
+			var level = options.Map - 1;
+
+			if ((uint)episode >= (uint)DoomInfo.ParTimes.Doom1.Count)
+				return 0;
+
+			var episodePars = DoomInfo.ParTimes.Doom1[episode];
+			return (uint)level < (uint)episodePars.Count ? 35 * episodePars[level] : 0;
 		}
 
 		private void DoWorldDone()
@@ -494,27 +510,38 @@ namespace ManagedDoom
 		public void InitNew(GameSkill skill, int episode, int map)
 		{
 			options.Skill = (GameSkill)Math.Clamp((int)skill, (int)GameSkill.Baby, (int)GameSkill.Nightmare);
-
-			if (options.GameMode == GameMode.Retail)
-			{
-				options.Episode = Math.Clamp(episode, 1, 4);
-			}
-			else if (options.GameMode == GameMode.Shareware)
-			{
-				options.Episode = 1;
-			}
-			else
-			{
-				options.Episode = Math.Clamp(episode, 1, 4);
-			}
+			secretExitReturnMap = 0;
 
 			if (options.GameMode == GameMode.Commercial)
 			{
+				options.Episode = 1;
 				options.Map = Math.Clamp(map, 1, 32);
 			}
 			else
 			{
-				options.Map = Math.Clamp(map, 1, 9);
+				var requestedEpisode = Math.Max(1, episode);
+				var requestedMap = Math.Max(1, map);
+
+				if (!EpisodeCatalog.HasMap(content.Wad, requestedEpisode, requestedMap))
+				{
+					var firstMap = EpisodeCatalog.FindFirstMap(content.Wad, requestedEpisode);
+
+					if (firstMap == -1)
+					{
+						var episodes = EpisodeCatalog.GetEpisodes(content.Wad);
+
+						if (episodes.Count == 0)
+							throw new InvalidDataException("No Doom episode maps were found in the loaded WAD set.");
+
+						requestedEpisode = episodes[0];
+						firstMap = EpisodeCatalog.FindFirstMap(content.Wad, requestedEpisode);
+					}
+
+					requestedMap = firstMap;
+				}
+
+				options.Episode = requestedEpisode;
+				options.Map = requestedMap;
 			}
 
 			options.Random.Clear();

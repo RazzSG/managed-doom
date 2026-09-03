@@ -207,7 +207,14 @@ namespace ManagedDoom.Video
 
         private void DrawSimpleMenuItem(SimpleMenuItem item)
         {
-            DrawMenuPatch(item.Name, item.ItemX, item.ItemY);
+            if (wad.GetLumpNumber(item.Name) != -1)
+            {
+                DrawMenuPatch(item.Name, item.ItemX, item.ItemY);
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(item.FallbackText))
+                DrawMenuText(item.FallbackText.ToCharArray(), item.ItemX, item.ItemY);
         }
 
         private void DrawToggleMenuItem(ToggleMenuItem item)

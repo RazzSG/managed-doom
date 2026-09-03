@@ -110,6 +110,10 @@ namespace ManagedDoom
 							break;
 
 						default:
+							// Custom Doom episodes are valid. Exact finale text/flat belongs
+							// to future MAPINFO/UMAPINFO metadata; use a safe generic screen.
+							flat = "F_SKY1";
+							text = string.Empty;
 							break;
 					}
 					break;

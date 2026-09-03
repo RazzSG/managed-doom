@@ -67,20 +67,10 @@ namespace ManagedDoom.Video
             "WIURH1"
         };
 
-        private static readonly string[][] doomLevels;
         private static readonly string[] doom2Levels;
 
         static IntermissionRenderer()
         {
-            doomLevels = new string[4][];
-            for (var e = 0; e < 4; e++)
-            {
-                doomLevels[e] = new string[9];
-                for (var m = 0; m < 9; m++)
-                {
-                    doomLevels[e][m] = "WILV" + e + m;
-                }
-            }
 
             doom2Levels = new string[32];
             for (var m = 0; m < 32; m++)
@@ -247,7 +237,7 @@ namespace ManagedDoom.Video
                 spTimeY,
                 im.TimeCount);
 
-            if (im.Info.Episode < 3)
+            if (im.Info.ParTime > 0)
             {
 
                 DrawPatch(
@@ -458,7 +448,7 @@ namespace ManagedDoom.Video
 
             if (im.Options.GameMode != GameMode.Commercial)
             {
-                if (im.Info.Episode > 2)
+                if ((uint)im.Info.Episode >= (uint)WorldMap.Locations.Count)
                 {
                     DrawEnteringLevelName(im);
                     return;
@@ -503,25 +493,10 @@ namespace ManagedDoom.Video
             var wbs = intermission.Info;
             var y = titleY;
 
-            string levelName;
-            if (intermission.Options.GameMode != GameMode.Commercial)
-            {
-                var e = intermission.Options.Episode - 1;
-                levelName = doomLevels[e][wbs.LastLevel];
-            }
-            else
-            {
-                levelName = doom2Levels[wbs.LastLevel];
-            }
-
-            // Draw level name. 
-            DrawPatch(
-                levelName,
-                (320 - GetWidth(levelName)) / 2,
-                y);
+            var levelHeight = DrawLevelName(intermission.Options, wbs.LastLevel, y);
 
             // Draw "Finished!".
-            y += (5 * GetHeight(levelName)) / 4;
+            y += (5 * levelHeight) / 4;
 
             DrawPatch(
                 "WIF",
@@ -534,30 +509,55 @@ namespace ManagedDoom.Video
             var wbs = im.Info;
             int y = titleY;
 
-            string levelName;
-            if (im.Options.GameMode != GameMode.Commercial)
-            {
-                var e = im.Options.Episode - 1;
-                levelName = doomLevels[e][wbs.NextLevel];
-            }
-            else
-            {
-                levelName = doom2Levels[wbs.NextLevel];
-            }
-
             // Draw "Entering".
             DrawPatch(
                 "WIENTER",
                 (320 - GetWidth("WIENTER")) / 2,
                 y);
 
-            // Draw level name.
-            y += (5 * GetHeight(levelName)) / 4;
+            y += (5 * GetHeight("WIENTER")) / 4;
+            DrawLevelName(im.Options, wbs.NextLevel, y);
+        }
 
-            DrawPatch(
-                levelName,
-                (320 - GetWidth(levelName)) / 2,
-                y);
+
+        private int DrawLevelName(GameOptions options, int zeroBasedMap, int y)
+        {
+            string patchName;
+            string fallback;
+
+            if (options.GameMode == GameMode.Commercial)
+            {
+                if ((uint)zeroBasedMap >= (uint)doom2Levels.Length)
+                {
+                    fallback = $"MAP{zeroBasedMap + 1:00}";
+                    return DrawLevelNameText(fallback, y);
+                }
+
+                patchName = doom2Levels[zeroBasedMap];
+                fallback = $"MAP{zeroBasedMap + 1:00}";
+            }
+            else
+            {
+                var episode = options.Episode;
+                var map = zeroBasedMap + 1;
+                patchName = $"WILV{episode - 1}{zeroBasedMap}";
+                fallback = $"E{episode}M{map}";
+            }
+
+            if (wad.GetLumpNumber(patchName) != -1)
+            {
+                DrawPatch(patchName, (320 - GetWidth(patchName)) / 2, y);
+                return GetHeight(patchName);
+            }
+
+            return DrawLevelNameText(fallback, y);
+        }
+
+        private int DrawLevelNameText(string text, int y)
+        {
+            var width = screen.MeasureText(text, scale);
+            screen.DrawText(text, (screen.Width - width) / 2, scale * (y + 7), scale);
+            return 7;
         }
 
 
@@ -666,7 +666,7 @@ namespace ManagedDoom.Video
                 return;
             }
 
-            if (im.Info.Episode > 2)
+            if ((uint)im.Info.Episode >= (uint)AnimationInfo.Episodes.Count)
             {
                 return;
             }
