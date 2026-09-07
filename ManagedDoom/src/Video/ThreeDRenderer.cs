@@ -1424,21 +1424,19 @@ namespace ManagedDoom.Video
                 renderSeg.X2,
                 renderSeg.Y2);
 
-            var rwScale = ScaleFromGlobalAngle(viewAngle + xToAngle[x1], viewAngle, rwNormalAngle, rwDistance);
+            var scale1 = ScaleFromGlobalAngle(viewAngle + xToAngle[x1], viewAngle, rwNormalAngle, rwDistance);
 
-            Fixed scale1 = rwScale;
             Fixed scale2;
-            Fixed rwScaleStep;
             if (x2 > x1)
             {
                 scale2 = ScaleFromGlobalAngle(viewAngle + xToAngle[x2], viewAngle, rwNormalAngle, rwDistance);
-                rwScaleStep = (scale2 - rwScale) / (x2 - x1);
             }
             else
             {
                 scale2 = scale1;
-                rwScaleStep = Fixed.Zero;
             }
+
+            var scaleInterpolator = new FixedRangeInterpolator(scale1, scale2, x2 - x1);
 
             //
             // Determine how the wall textures are horizontally aligned
@@ -1484,11 +1482,18 @@ namespace ManagedDoom.Video
             worldFrontZ1 >>= 4;
             worldFrontZ2 >>= 4;
 
-            // The Y positions of the top / bottom edges of the wall on the screen.
-            var wallY1Frac = (centerYFrac >> 4) - worldFrontZ1 * rwScale;
-            var wallY1Step = -(rwScaleStep * worldFrontZ1);
-            var wallY2Frac = (centerYFrac >> 4) - worldFrontZ2 * rwScale;
-            var wallY2Step = -(rwScaleStep * worldFrontZ2);
+            // Interpolate wall edges from their exact left/right endpoint values.
+            // A single Fixed step can truncate a shallow slope to zero on wide walls,
+            // which makes the perspective jump when that step crosses an integer LSB.
+            var centerYWall = centerYFrac >> 4;
+            var wallY1Interpolator = new FixedRangeInterpolator(
+                centerYWall - worldFrontZ1 * scale1,
+                centerYWall - worldFrontZ1 * scale2,
+                x2 - x1);
+            var wallY2Interpolator = new FixedRangeInterpolator(
+                centerYWall - worldFrontZ2 * scale1,
+                centerYWall - worldFrontZ2 * scale2,
+                x2 - x1);
 
             //
             // Determine which color map is used for the plane according to the light level.
@@ -1511,7 +1516,6 @@ namespace ManagedDoom.Video
             visWallRange.X2 = x2;
             visWallRange.Scale1 = scale1;
             visWallRange.Scale2 = scale2;
-            visWallRange.ScaleStep = rwScaleStep;
             visWallRange.Silhouette = Silhouette.Both;
             visWallRange.LowerSilHeight = Fixed.MaxValue;
             visWallRange.UpperSilHeight = Fixed.MinValue;
@@ -1534,6 +1538,10 @@ namespace ManagedDoom.Video
 
             for (var x = x1; x <= x2; x++)
             {
+                var rwScale = scaleInterpolator.Value;
+                var wallY1Frac = wallY1Interpolator.Value;
+                var wallY2Frac = wallY2Interpolator.Value;
+
                 var drawWallY1 = (wallY1Frac.Data + heightUnit - 1) >> heightBits;
                 var drawWallY2 = wallY2Frac.Data >> heightBits;
 
@@ -1583,9 +1591,9 @@ namespace ManagedDoom.Video
                     DrawFloorColumn(frontState.FloorPlaneSector, floorFlat, floorPlaneLights, x, fy1, fy2, frontSectorFloorHeight);
                 }
 
-                rwScale += rwScaleStep;
-                wallY1Frac += wallY1Step;
-                wallY2Frac += wallY2Step;
+                scaleInterpolator.Advance();
+                wallY1Interpolator.Advance();
+                wallY2Interpolator.Advance();
             }
         }
 
@@ -1746,21 +1754,19 @@ namespace ManagedDoom.Video
                 renderSeg.X2,
                 renderSeg.Y2);
 
-            var rwScale = ScaleFromGlobalAngle(viewAngle + xToAngle[x1], viewAngle, rwNormalAngle, rwDistance);
+            var scale1 = ScaleFromGlobalAngle(viewAngle + xToAngle[x1], viewAngle, rwNormalAngle, rwDistance);
 
-            Fixed scale1 = rwScale;
             Fixed scale2;
-            Fixed rwScaleStep;
             if (x2 > x1)
             {
                 scale2 = ScaleFromGlobalAngle(viewAngle + xToAngle[x2], viewAngle, rwNormalAngle, rwDistance);
-                rwScaleStep = (scale2 - rwScale) / (x2 - x1);
             }
             else
             {
                 scale2 = scale1;
-                rwScaleStep = Fixed.Zero;
             }
+
+            var scaleInterpolator = new FixedRangeInterpolator(scale1, scale2, x2 - x1);
 
             //
             // Determine how the wall textures are horizontally aligned
@@ -1814,44 +1820,41 @@ namespace ManagedDoom.Video
             worldBackZ1 >>= 4;
             worldBackZ2 >>= 4;
 
-            // The Y positions of the top / bottom edges of the wall on the screen..
-            var wallY1Frac = (centerYFrac >> 4) - worldFrontZ1 * rwScale;
-            var wallY1Step = -(rwScaleStep * worldFrontZ1);
-            var wallY2Frac = (centerYFrac >> 4) - worldFrontZ2 * rwScale;
-            var wallY2Step = -(rwScaleStep * worldFrontZ2);
+            // Preserve sub-LSB perspective slopes for the wall and portal edges.
+            // The endpoints are exact; the interpolators distribute the remainder
+            // instead of collapsing a shallow per-column Fixed step to zero.
+            var centerYWall = centerYFrac >> 4;
+            var wallY1Interpolator = new FixedRangeInterpolator(
+                centerYWall - worldFrontZ1 * scale1,
+                centerYWall - worldFrontZ1 * scale2,
+                x2 - x1);
+            var wallY2Interpolator = new FixedRangeInterpolator(
+                centerYWall - worldFrontZ2 * scale1,
+                centerYWall - worldFrontZ2 * scale2,
+                x2 - x1);
 
-            // The Y position of the top edge of the portal (if visible).
-            var portalY1Frac = default(Fixed);
-            var portalY1Step = default(Fixed);
+            var portalY1Interpolator = default(FixedRangeInterpolator);
             if (drawUpperWall)
             {
-                if (worldBackZ1 > worldFrontZ2)
-                {
-                    portalY1Frac = (centerYFrac >> 4) - worldBackZ1 * rwScale;
-                    portalY1Step = -(rwScaleStep * worldBackZ1);
-                }
-                else
-                {
-                    portalY1Frac = (centerYFrac >> 4) - worldFrontZ2 * rwScale;
-                    portalY1Step = -(rwScaleStep * worldFrontZ2);
-                }
+                var portalZ1 = worldBackZ1 > worldFrontZ2
+                    ? worldBackZ1
+                    : worldFrontZ2;
+                portalY1Interpolator = new FixedRangeInterpolator(
+                    centerYWall - portalZ1 * scale1,
+                    centerYWall - portalZ1 * scale2,
+                    x2 - x1);
             }
 
-            // The Y position of the bottom edge of the portal (if visible).
-            var portalY2Frac = default(Fixed);
-            var portalY2Step = default(Fixed);
+            var portalY2Interpolator = default(FixedRangeInterpolator);
             if (drawLowerWall)
             {
-                if (worldBackZ2 < worldFrontZ1)
-                {
-                    portalY2Frac = (centerYFrac >> 4) - worldBackZ2 * rwScale;
-                    portalY2Step = -(rwScaleStep * worldBackZ2);
-                }
-                else
-                {
-                    portalY2Frac = (centerYFrac >> 4) - worldFrontZ1 * rwScale;
-                    portalY2Step = -(rwScaleStep * worldFrontZ1);
-                }
+                var portalZ2 = worldBackZ2 < worldFrontZ1
+                    ? worldBackZ2
+                    : worldFrontZ1;
+                portalY2Interpolator = new FixedRangeInterpolator(
+                    centerYWall - portalZ2 * scale1,
+                    centerYWall - portalZ2 * scale2,
+                    x2 - x1);
             }
 
             //
@@ -1875,7 +1878,6 @@ namespace ManagedDoom.Video
             visWallRange.X2 = x2;
             visWallRange.Scale1 = scale1;
             visWallRange.Scale2 = scale2;
-            visWallRange.ScaleStep = rwScaleStep;
 
             visWallRange.UpperClip = -1;
             visWallRange.LowerClip = -1;
@@ -1965,6 +1967,12 @@ namespace ManagedDoom.Video
 
             for (var x = x1; x <= x2; x++)
             {
+                var rwScale = scaleInterpolator.Value;
+                var wallY1Frac = wallY1Interpolator.Value;
+                var wallY2Frac = wallY2Interpolator.Value;
+                var portalY1Frac = portalY1Interpolator.Value;
+                var portalY2Frac = portalY2Interpolator.Value;
+
                 var drawWallY1 = (wallY1Frac.Data + heightUnit - 1) >> heightBits;
                 var drawWallY2 = wallY2Frac.Data >> heightBits;
 
@@ -2019,7 +2027,7 @@ namespace ManagedDoom.Video
                         upperClip[x] = (short)wy2;
                     }
 
-                    portalY1Frac += portalY1Step;
+                    portalY1Interpolator.Advance();
                 }
                 else if (drawCeiling)
                 {
@@ -2066,7 +2074,7 @@ namespace ManagedDoom.Video
                         lowerClip[x] = (short)wy1;
                     }
 
-                    portalY2Frac += portalY2Step;
+                    portalY2Interpolator.Advance();
                 }
                 else if (drawFloor)
                 {
@@ -2085,9 +2093,9 @@ namespace ManagedDoom.Video
                     clipData[maskedTextureColumn + x] = (short)textureColumn;
                 }
 
-                rwScale += rwScaleStep;
-                wallY1Frac += wallY1Step;
-                wallY2Frac += wallY2Step;
+                scaleInterpolator.Advance();
+                wallY1Interpolator.Advance();
+                wallY2Interpolator.Advance();
             }
 
             //
@@ -2173,8 +2181,11 @@ namespace ManagedDoom.Video
             }
             midTextureAlt += seg.SideDef.RowOffset;
 
-            var scaleStep = drawSeg.ScaleStep;
-            var scale = drawSeg.Scale1 + (x1 - drawSeg.X1) * scaleStep;
+            var scaleInterpolator = new FixedRangeInterpolator(
+                drawSeg.Scale1,
+                drawSeg.Scale2,
+                drawSeg.X2 - drawSeg.X1,
+                x1 - drawSeg.X1);
 
             // Resolve a named Boom translucency filter once for this masked
             // drawseg. The inner column/pixel loops only receive the ready table.
@@ -2186,6 +2197,7 @@ namespace ManagedDoom.Video
 
             for (var x = x1; x <= x2; x++)
             {
+                var scale = scaleInterpolator.Value;
                 var index = Math.Min(scale.Data >> scaleLightShift, maxScaleLight - 1);
 
                 var col = clipData[drawSeg.MaskedTextureColumn + x];
@@ -2228,7 +2240,7 @@ namespace ManagedDoom.Video
                     clipData[drawSeg.MaskedTextureColumn + x] = short.MaxValue;
                 }
 
-                scale += scaleStep;
+                scaleInterpolator.Advance();
             }
         }
 
@@ -3811,7 +3823,6 @@ namespace ManagedDoom.Video
 
             public Fixed Scale1;
             public Fixed Scale2;
-            public Fixed ScaleStep;
 
             public Silhouette Silhouette;
             public Fixed UpperSilHeight;
