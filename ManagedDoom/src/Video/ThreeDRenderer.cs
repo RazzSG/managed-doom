@@ -1066,12 +1066,10 @@ namespace ManagedDoom.Video
 
         private void DrawSeg(Seg seg)
         {
-            // Boom-derived ports correct renderer-only BSP split vertices back
-            // onto their source linedef to suppress slime-trail / plane seams.
-            // This does not mutate map/gameplay geometry.
-            var renderSeg = BoomSegRenderGeometryResolver.Resolve(
-                seg,
-                world.Options.Compatibility);
+            // Correct renderer-only BSP split vertices back onto their source linedef
+            // to suppress slime-trail / plane seams. Map, collision, and gameplay
+            // geometry remain untouched.
+            var renderSeg = SegRenderGeometryResolver.Resolve(seg);
 
             // OPTIMIZE: quickly reject orthogonal back sides.
             var angle1 = Geometry.PointToAngle(viewX, viewY, renderSeg.X1, renderSeg.Y1);
@@ -1412,9 +1410,7 @@ namespace ManagedDoom.Video
             // Calculate the scaling factors of the left and right edges of the wall range.
             //
 
-            var renderSeg = BoomSegRenderGeometryResolver.Resolve(
-                seg,
-                world.Options.Compatibility);
+            var renderSeg = SegRenderGeometryResolver.Resolve(seg);
 
             var rwNormalAngle = renderSeg.Angle + Angle.Ang90;
 
@@ -1736,9 +1732,7 @@ namespace ManagedDoom.Video
             // Calculate the scaling factors of the left and right edges of the wall range.
             //
 
-            var renderSeg = BoomSegRenderGeometryResolver.Resolve(
-                seg,
-                world.Options.Compatibility);
+            var renderSeg = SegRenderGeometryResolver.Resolve(seg);
 
             var rwNormalAngle = renderSeg.Angle + Angle.Ang90;
 

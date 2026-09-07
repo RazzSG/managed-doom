@@ -1,16 +1,15 @@
 using System;
 using ManagedDoom;
-using ManagedDoom.Compatibility;
-using ManagedDoom.Compatibility.Boom.Rendering;
+using ManagedDoom.Video;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace ManagedDoomTest.UnitTests;
 
 [TestClass]
-public sealed class BoomSegRenderGeometryResolverTest
+public sealed class SegRenderGeometryResolverTest
 {
     [TestMethod]
-    public void BoomProjectsSplitVertexBackOntoSourceLinedef()
+    public void ProjectsSplitVertexBackOntoSourceLinedef()
     {
         // Real 1monster.wad MAP01 geometry from linedef 665:
         // linedef (93,204) -> (80,208), BSP split vertex (84,207).
@@ -57,7 +56,7 @@ public sealed class BoomSegRenderGeometryResolverTest
             sector);
 
         var before = DistanceToLine(split.X, split.Y, line);
-        var resolved = BoomSegRenderGeometryResolver.Resolve(seg, GameCompatibility.Boom);
+        var resolved = SegRenderGeometryResolver.Resolve(seg);
         var after = DistanceToLine(resolved.X1, resolved.Y1, line);
 
         Assert.IsTrue(resolved.Corrected);
@@ -70,19 +69,23 @@ public sealed class BoomSegRenderGeometryResolverTest
     }
 
     [TestMethod]
-    public void VanillaKeepsOriginalSegGeometry()
+    public void ProjectsSplitVertexForVanillaMapBecauseCorrectionIsRendererOnly()
     {
-        var a = new Vertex(Fixed.FromInt(93), Fixed.FromInt(204));
-        var b = new Vertex(Fixed.FromInt(80), Fixed.FromInt(208));
-        var split = new Vertex(Fixed.FromInt(84), Fixed.FromInt(207));
+        // Real NUTS3.WAD MAP01 geometry from sector 78 / linedef 842:
+        // linedef (-4095,-1097) -> (-4078,-1068), BSP split vertex (-4093,-1094).
+        // NUTS3 has no Boom markers and resolves to Vanilla in Auto mode, but the
+        // node-builder rounding error is still a renderer problem and must be fixed.
+        var a = new Vertex(Fixed.FromInt(-4095), Fixed.FromInt(-1097));
+        var b = new Vertex(Fixed.FromInt(-4078), Fixed.FromInt(-1068));
+        var split = new Vertex(Fixed.FromInt(-4093), Fixed.FromInt(-1094));
 
         var sector = new Sector(
             0,
-            Fixed.Zero,
-            Fixed.FromInt(128),
+            Fixed.FromInt(-1020),
+            Fixed.FromInt(2000),
             0,
             0,
-            160,
+            255,
             (SectorSpecial)0,
             0);
 
@@ -105,22 +108,25 @@ public sealed class BoomSegRenderGeometryResolverTest
 
         var seg = new Seg(
             split,
-            a,
+            b,
             Fixed.Zero,
-            Geometry.PointToAngle(split.X, split.Y, a.X, a.Y),
+            Geometry.PointToAngle(split.X, split.Y, b.X, b.Y),
             side,
             line,
             sector,
             sector);
 
-        var resolved = BoomSegRenderGeometryResolver.Resolve(seg, GameCompatibility.Vanilla);
+        var before = DistanceToLine(split.X, split.Y, line);
+        var resolved = SegRenderGeometryResolver.Resolve(seg);
+        var after = DistanceToLine(resolved.X1, resolved.Y1, line);
 
-        Assert.IsFalse(resolved.Corrected);
-        Assert.AreEqual(split.X.Data, resolved.X1.Data);
-        Assert.AreEqual(split.Y.Data, resolved.Y1.Data);
-        Assert.AreEqual(a.X.Data, resolved.X2.Data);
-        Assert.AreEqual(a.Y.Data, resolved.Y2.Data);
-        Assert.AreEqual(seg.Angle.Data, resolved.Angle.Data);
+        Assert.IsTrue(resolved.Corrected);
+        Assert.IsTrue(after < before);
+        Assert.IsTrue(after < 0.001);
+
+        // Map/gameplay geometry is untouched.
+        Assert.AreEqual(Fixed.FromInt(-4093).Data, split.X.Data);
+        Assert.AreEqual(Fixed.FromInt(-1094).Data, split.Y.Data);
     }
 
     private static double DistanceToLine(Fixed x, Fixed y, LineDef line)

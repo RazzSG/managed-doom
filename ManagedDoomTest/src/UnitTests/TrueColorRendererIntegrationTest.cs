@@ -113,7 +113,7 @@ namespace ManagedDoomTest.UnitTests
         [TestMethod]
         public void TrueColorMap01FrameMatchesReference()
         {
-            const ulong expected = 0x68F48C8B0FB7059DUL;
+            const ulong expected = 0x0B113BD0BC510A44UL;
 
             Array.Clear(screen.TrueColorData, 0, screen.TrueColorData.Length);
 

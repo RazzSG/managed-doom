@@ -1,32 +1,27 @@
 using System;
-using ManagedDoom.Compatibility;
 
-namespace ManagedDoom.Compatibility.Boom.Rendering;
+namespace ManagedDoom.Video;
 
 /// <summary>
-/// Resolves renderer-only seg geometry for Boom-family maps.
+/// Resolves renderer-only seg geometry.
 ///
 /// Classic BSP node builders can introduce split vertices that are a fraction of
-/// a map unit away from the linedef they belong to. Modern Boom-derived ports
-/// project those renderer vertices back onto the source linedef to suppress
-/// slime-trail / plane-seam artifacts without changing gameplay geometry.
+/// a map unit away from the linedef they belong to. Projecting those renderer
+/// vertices back onto the source linedef suppresses slime-trail / plane-seam
+/// artifacts without changing map, collision, or gameplay geometry. This is a
+/// renderer correction and therefore does not depend on gameplay compatibility.
 /// </summary>
-public static class BoomSegRenderGeometryResolver
+public static class SegRenderGeometryResolver
 {
     private const int MaxCorrectionUnits = 8;
 
-    public static BoomSegRenderGeometry Resolve(
-        Seg seg,
-        GameCompatibility compatibility)
+    public static SegRenderGeometry Resolve(Seg seg)
     {
         if (seg == null)
             throw new ArgumentNullException(nameof(seg));
 
-        if (!GameCompatibilityFeatures.SupportsBoom(compatibility) ||
-            seg.LineDef == null)
-        {
+        if (seg.LineDef == null)
             return Original(seg);
-        }
 
         var line = seg.LineDef;
 
@@ -41,7 +36,7 @@ public static class BoomSegRenderGeometryResolver
             ? seg.Angle
             : Geometry.PointToAngle(x1, y1, x2, y2);
 
-        return new BoomSegRenderGeometry(
+        return new SegRenderGeometry(
             x1,
             y1,
             x2,
@@ -50,7 +45,7 @@ public static class BoomSegRenderGeometryResolver
             corrected: true);
     }
 
-    private static BoomSegRenderGeometry Original(Seg seg) =>
+    private static SegRenderGeometry Original(Seg seg) =>
         new(
             seg.Vertex1.X,
             seg.Vertex1.Y,
@@ -118,9 +113,9 @@ public static class BoomSegRenderGeometryResolver
     }
 }
 
-public readonly struct BoomSegRenderGeometry
+public readonly struct SegRenderGeometry
 {
-    public BoomSegRenderGeometry(
+    public SegRenderGeometry(
         Fixed x1,
         Fixed y1,
         Fixed x2,
