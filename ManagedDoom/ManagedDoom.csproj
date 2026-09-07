@@ -37,6 +37,12 @@
     <None Remove="src\Silk\**" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\Boom\STKEYS6.lmp" LogicalName="ManagedDoom.Resources.Boom.STKEYS6.lmp" />
+    <EmbeddedResource Include="Resources\Boom\STKEYS7.lmp" LogicalName="ManagedDoom.Resources.Boom.STKEYS7.lmp" />
+    <EmbeddedResource Include="Resources\Boom\STKEYS8.lmp" LogicalName="ManagedDoom.Resources.Boom.STKEYS8.lmp" />
+  </ItemGroup>
+
     <Target Name="CopyDllToMod" AfterTargets="Build">
         <Message Text="Копирование DLL в папку мода Terraria..." Importance="high" />
         <Copy

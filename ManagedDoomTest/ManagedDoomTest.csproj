@@ -48,6 +48,18 @@
     <None Update="data\autoaim_test.wad">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Update="data\boom_behavior_test.wad">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="data\reference\BOOMEDIT.WAD" Condition="Exists('data\reference\BOOMEDIT.WAD')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="data\reference\boom-corpus.json" Condition="Exists('data\reference\boom-corpus.json')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="data\reference\dehacked-corpus.json" Condition="Exists('data\reference\dehacked-corpus.json')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Update="data\baron_test.lmp">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

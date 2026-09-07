@@ -1,0 +1,23 @@
+{
+  "defaultTicksPerMap": 256,
+  "entries": [
+    {
+      "name": "Resurgence",
+      "iwad": "DOOM2.WAD",
+      "pwads": ["corpus/resurge.wad"],
+      "maps": ["MAP01", "MAP15", "MAP30"]
+    },
+    {
+      "name": "Speed of Doom",
+      "iwad": "DOOM2.WAD",
+      "pwads": ["corpus/sodfinal.wad"],
+      "maps": ["MAP01", "MAP15", "MAP30"]
+    },
+    {
+      "name": "Ancient Aliens",
+      "iwad": "DOOM2.WAD",
+      "pwads": ["corpus/aaliens.wad"],
+      "maps": ["MAP01", "MAP15", "MAP30"]
+    }
+  ]
+}

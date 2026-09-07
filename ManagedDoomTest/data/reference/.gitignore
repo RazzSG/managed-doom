@@ -1,0 +1,11 @@
+# External verification assets are local-only and must not be committed.
+*.wad
+*.WAD
+boom-corpus.json
+corpus/
+
+dehacked-corpus.json
+*.deh
+*.DEH
+*.bex
+*.BEX
