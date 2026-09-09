@@ -992,7 +992,124 @@ namespace ManagedDoom
             new MobjStateDef(963, Sprite.TLP2, 32768, 4, null, null, MobjState.Tech2Lamp2, 0, 0), // State.Tech2Lamp
             new MobjStateDef(964, Sprite.TLP2, 32769, 4, null, null, MobjState.Tech2Lamp3, 0, 0), // State.Tech2Lamp2
             new MobjStateDef(965, Sprite.TLP2, 32770, 4, null, null, MobjState.Tech2Lamp4, 0, 0), // State.Tech2Lamp3
-            new MobjStateDef(966, Sprite.TLP2, 32771, 4, null, null, MobjState.Tech2Lamp, 0, 0) // State.Tech2Lamp4
+            new MobjStateDef(966, Sprite.TLP2, 32771, 4, null, null, MobjState.Tech2Lamp, 0, 0), // State.Tech2Lamp4
+            // Canonical MBF states inserted between the Doom II table and DOGS.
+            // Keep the legacy enum names so public numeric/API compatibility is
+            // preserved, but these slots are real runtime states, not placeholders.
+            new MobjStateDef(967, Sprite.TNT1, 0, -1, null, null, MobjState.MbfReservedState1, 0, 0), // S_TNT1
+            new MobjStateDef(968, Sprite.MISL, 32768, 1000, null, ma.Die, MobjState.MbfReservedState2, 0, 0), // S_GRENADE
+            new MobjStateDef(969, Sprite.MISL, 32769, 4, null, ma.Scream, MobjState.MbfReservedState4, 0, 0), // S_DETONATE
+            new MobjStateDef(970, Sprite.MISL, 32770, 6, null, ma.Detonate, MobjState.MbfReservedState5, 0, 0), // S_DETONATE2
+            new MobjStateDef(971, Sprite.MISL, 32771, 10, null, null, MobjState.Null, 0, 0), // S_DETONATE3
+            new MobjStateDef(972, Sprite.DOGS, 0, 10, null, ma.Look, MobjState.DogsStnd2, 0, 0), // State.DogsStnd
+            new MobjStateDef(973, Sprite.DOGS, 1, 10, null, ma.Look, MobjState.DogsStnd, 0, 0), // State.DogsStnd2
+            new MobjStateDef(974, Sprite.DOGS, 0, 2, null, ma.Chase, MobjState.DogsRun2, 0, 0), // State.DogsRun1
+            new MobjStateDef(975, Sprite.DOGS, 0, 2, null, ma.Chase, MobjState.DogsRun3, 0, 0), // State.DogsRun2
+            new MobjStateDef(976, Sprite.DOGS, 1, 2, null, ma.Chase, MobjState.DogsRun4, 0, 0), // State.DogsRun3
+            new MobjStateDef(977, Sprite.DOGS, 1, 2, null, ma.Chase, MobjState.DogsRun5, 0, 0), // State.DogsRun4
+            new MobjStateDef(978, Sprite.DOGS, 2, 2, null, ma.Chase, MobjState.DogsRun6, 0, 0), // State.DogsRun5
+            new MobjStateDef(979, Sprite.DOGS, 2, 2, null, ma.Chase, MobjState.DogsRun7, 0, 0), // State.DogsRun6
+            new MobjStateDef(980, Sprite.DOGS, 3, 2, null, ma.Chase, MobjState.DogsRun8, 0, 0), // State.DogsRun7
+            new MobjStateDef(981, Sprite.DOGS, 3, 2, null, ma.Chase, MobjState.DogsRun1, 0, 0), // State.DogsRun8
+            new MobjStateDef(982, Sprite.DOGS, 4, 8, null, ma.FaceTarget, MobjState.DogsAtk2, 0, 0), // State.DogsAtk1
+            new MobjStateDef(983, Sprite.DOGS, 5, 8, null, ma.FaceTarget, MobjState.DogsAtk3, 0, 0), // State.DogsAtk2
+            new MobjStateDef(984, Sprite.DOGS, 6, 8, null, ma.SargAttack, MobjState.DogsRun1, 0, 0), // State.DogsAtk3
+            new MobjStateDef(985, Sprite.DOGS, 7, 2, null, null, MobjState.DogsPain2, 0, 0), // State.DogsPain
+            new MobjStateDef(986, Sprite.DOGS, 7, 2, null, ma.Pain, MobjState.DogsRun1, 0, 0), // State.DogsPain2
+            new MobjStateDef(987, Sprite.DOGS, 8, 8, null, null, MobjState.DogsDie2, 0, 0), // State.DogsDie1
+            new MobjStateDef(988, Sprite.DOGS, 9, 8, null, ma.Scream, MobjState.DogsDie3, 0, 0), // State.DogsDie2
+            new MobjStateDef(989, Sprite.DOGS, 10, 4, null, null, MobjState.DogsDie4, 0, 0), // State.DogsDie3
+            new MobjStateDef(990, Sprite.DOGS, 11, 4, null, ma.Fall, MobjState.DogsDie5, 0, 0), // State.DogsDie4
+            new MobjStateDef(991, Sprite.DOGS, 12, 4, null, null, MobjState.DogsDie6, 0, 0), // State.DogsDie5
+            new MobjStateDef(992, Sprite.DOGS, 13, -1, null, null, MobjState.Null, 0, 0), // State.DogsDie6
+            new MobjStateDef(993, Sprite.DOGS, 13, 5, null, null, MobjState.DogsRaise2, 0, 0), // State.DogsRaise1
+            new MobjStateDef(994, Sprite.DOGS, 12, 5, null, null, MobjState.DogsRaise3, 0, 0), // State.DogsRaise2
+            new MobjStateDef(995, Sprite.DOGS, 11, 5, null, null, MobjState.DogsRaise4, 0, 0), // State.DogsRaise3
+            new MobjStateDef(996, Sprite.DOGS, 10, 5, null, null, MobjState.DogsRaise5, 0, 0), // State.DogsRaise4
+            new MobjStateDef(997, Sprite.DOGS, 9, 5, null, null, MobjState.DogsRaise6, 0, 0), // State.DogsRaise5
+            new MobjStateDef(998, Sprite.DOGS, 8, 5, null, null, MobjState.DogsRun1, 0, 0), // State.DogsRaise6
+            // Classic MBF also exposes its beta state namespace to DeHackEd.
+            // Keep these real slots so complevel-11 patches can address 999..1075.
+            new MobjStateDef(999, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1000, 0, 0), // MBF beta state 999
+            new MobjStateDef(1000, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1001, 0, 0), // MBF beta state 1000
+            new MobjStateDef(1001, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1002, 0, 0), // MBF beta state 1001
+            new MobjStateDef(1002, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1003, 0, 0), // MBF beta state 1002
+            new MobjStateDef(1003, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1004, 0, 0), // MBF beta state 1003
+            new MobjStateDef(1004, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1005, 0, 0), // MBF beta state 1004
+            new MobjStateDef(1005, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1006, 0, 0), // MBF beta state 1005
+            new MobjStateDef(1006, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1007, 0, 0), // MBF beta state 1006
+            new MobjStateDef(1007, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1008, 0, 0), // MBF beta state 1007
+            new MobjStateDef(1008, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1009, 0, 0), // MBF beta state 1008
+            new MobjStateDef(1009, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1010, 0, 0), // MBF beta state 1009
+            new MobjStateDef(1010, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1011, 0, 0), // MBF beta state 1010
+            new MobjStateDef(1011, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1012, 0, 0), // MBF beta state 1011
+            new MobjStateDef(1012, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1013, 0, 0), // MBF beta state 1012
+            new MobjStateDef(1013, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1014, 0, 0), // MBF beta state 1013
+            new MobjStateDef(1014, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1015, 0, 0), // MBF beta state 1014
+            new MobjStateDef(1015, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1016, 0, 0), // MBF beta state 1015
+            new MobjStateDef(1016, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1017, 0, 0), // MBF beta state 1016
+            new MobjStateDef(1017, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1018, 0, 0), // MBF beta state 1017
+            new MobjStateDef(1018, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1019, 0, 0), // MBF beta state 1018
+            new MobjStateDef(1019, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1020, 0, 0), // MBF beta state 1019
+            new MobjStateDef(1020, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1021, 0, 0), // MBF beta state 1020
+            new MobjStateDef(1021, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1022, 0, 0), // MBF beta state 1021
+            new MobjStateDef(1022, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1023, 0, 0), // MBF beta state 1022
+            new MobjStateDef(1023, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1024, 0, 0), // MBF beta state 1023
+            new MobjStateDef(1024, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1025, 0, 0), // MBF beta state 1024
+            new MobjStateDef(1025, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1026, 0, 0), // MBF beta state 1025
+            new MobjStateDef(1026, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1027, 0, 0), // MBF beta state 1026
+            new MobjStateDef(1027, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1028, 0, 0), // MBF beta state 1027
+            new MobjStateDef(1028, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1029, 0, 0), // MBF beta state 1028
+            new MobjStateDef(1029, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1030, 0, 0), // MBF beta state 1029
+            new MobjStateDef(1030, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1031, 0, 0), // MBF beta state 1030
+            new MobjStateDef(1031, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1032, 0, 0), // MBF beta state 1031
+            new MobjStateDef(1032, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1033, 0, 0), // MBF beta state 1032
+            new MobjStateDef(1033, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1034, 0, 0), // MBF beta state 1033
+            new MobjStateDef(1034, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1035, 0, 0), // MBF beta state 1034
+            new MobjStateDef(1035, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1036, 0, 0), // MBF beta state 1035
+            new MobjStateDef(1036, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1037, 0, 0), // MBF beta state 1036
+            new MobjStateDef(1037, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1038, 0, 0), // MBF beta state 1037
+            new MobjStateDef(1038, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1039, 0, 0), // MBF beta state 1038
+            new MobjStateDef(1039, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1040, 0, 0), // MBF beta state 1039
+            new MobjStateDef(1040, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1041, 0, 0), // MBF beta state 1040
+            new MobjStateDef(1041, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1042, 0, 0), // MBF beta state 1041
+            new MobjStateDef(1042, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1043, 0, 0), // MBF beta state 1042
+            new MobjStateDef(1043, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1044, 0, 0), // MBF beta state 1043
+            new MobjStateDef(1044, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1045, 0, 0), // MBF beta state 1044
+            new MobjStateDef(1045, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1046, 0, 0), // MBF beta state 1045
+            new MobjStateDef(1046, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1047, 0, 0), // MBF beta state 1046
+            new MobjStateDef(1047, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1048, 0, 0), // MBF beta state 1047
+            new MobjStateDef(1048, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1049, 0, 0), // MBF beta state 1048
+            new MobjStateDef(1049, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1050, 0, 0), // MBF beta state 1049
+            new MobjStateDef(1050, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1051, 0, 0), // MBF beta state 1050
+            new MobjStateDef(1051, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1052, 0, 0), // MBF beta state 1051
+            new MobjStateDef(1052, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaState1053, 0, 0), // MBF beta state 1052
+            new MobjStateDef(1053, Sprite.TNT1, 0, -1, null, null, MobjState.MbfBetaSceptre, 0, 0), // MBF beta state 1053
+            new MobjStateDef(1054, Sprite.BON3, 0, -1, null, null, MobjState.Null, 0, 0), // MBF beta sceptre
+            new MobjStateDef(1055, Sprite.BON4, 0, -1, null, null, MobjState.Null, 0, 0), // MBF beta bible
+            // PrBoom+/MBF canonical beta lost-soul states.  Frozen Heart and other
+            // classic DeHackEd patches intentionally override only part of these
+            // records, so the untouched defaults must match the reference port.
+            new MobjStateDef(1056, Sprite.SKUL, 0, 10, null, ma.Look, MobjState.MbfBetaSkullStand, 0, 0), // S_BSKUL_STND
+            new MobjStateDef(1057, Sprite.SKUL, 1, 5, null, ma.Chase, MobjState.MbfBetaSkullRun2, 0, 0), // S_BSKUL_RUN1
+            new MobjStateDef(1058, Sprite.SKUL, 2, 5, null, ma.Chase, MobjState.MbfBetaSkullRun3, 0, 0), // S_BSKUL_RUN2
+            new MobjStateDef(1059, Sprite.SKUL, 3, 5, null, ma.Chase, MobjState.MbfBetaSkullRun4, 0, 0), // S_BSKUL_RUN3
+            new MobjStateDef(1060, Sprite.SKUL, 0, 5, null, ma.Chase, MobjState.MbfBetaSkullRun1, 0, 0), // S_BSKUL_RUN4
+            new MobjStateDef(1061, Sprite.SKUL, 4, 4, null, ma.FaceTarget, MobjState.MbfBetaSkullAttack2, 0, 0), // S_BSKUL_ATK1
+            new MobjStateDef(1062, Sprite.SKUL, 5, 5, null, ma.BetaSkullAttack, MobjState.MbfBetaSkullAttack3, 0, 0), // S_BSKUL_ATK2
+            new MobjStateDef(1063, Sprite.SKUL, 5, 4, null, null, MobjState.MbfBetaSkullRun1, 0, 0), // S_BSKUL_ATK3
+            new MobjStateDef(1064, Sprite.SKUL, 6, 4, null, null, MobjState.MbfBetaSkullPain2, 0, 0), // S_BSKUL_PAIN1
+            new MobjStateDef(1065, Sprite.SKUL, 7, 2, null, ma.Pain, MobjState.MbfBetaSkullRun1, 0, 0), // S_BSKUL_PAIN2
+            new MobjStateDef(1066, Sprite.SKUL, 8, 4, null, null, MobjState.MbfBetaSkullRun1, 0, 0), // S_BSKUL_PAIN3
+            new MobjStateDef(1067, Sprite.SKUL, 9, 5, null, null, MobjState.MbfBetaSkullDie2, 0, 0), // S_BSKUL_DIE1
+            new MobjStateDef(1068, Sprite.SKUL, 10, 5, null, null, MobjState.MbfBetaSkullDie3, 0, 0), // S_BSKUL_DIE2
+            new MobjStateDef(1069, Sprite.SKUL, 11, 5, null, null, MobjState.MbfBetaSkullDie4, 0, 0), // S_BSKUL_DIE3
+            new MobjStateDef(1070, Sprite.SKUL, 12, 5, null, null, MobjState.MbfBetaSkullDie5, 0, 0), // S_BSKUL_DIE4
+            new MobjStateDef(1071, Sprite.SKUL, 13, 5, null, ma.Scream, MobjState.MbfBetaSkullDie6, 0, 0), // S_BSKUL_DIE5
+            new MobjStateDef(1072, Sprite.SKUL, 14, 5, null, null, MobjState.MbfBetaSkullDie7, 0, 0), // S_BSKUL_DIE6
+            new MobjStateDef(1073, Sprite.SKUL, 15, 5, null, ma.Fall, MobjState.MbfBetaSkullDie8, 0, 0), // S_BSKUL_DIE7
+            new MobjStateDef(1074, Sprite.SKUL, 16, 5, null, ma.Stop, MobjState.MbfBetaSkullDie8, 0, 0), // S_BSKUL_DIE8
+            new MobjStateDef(1075, Sprite.MISL, 32769, 8, null, ma.Mushroom, MobjState.Explode2, 0, 0) // S_MUSHROOM
         };
     }
 }

@@ -1,4 +1,4 @@
-//
+﻿//
 // Copyright (C) 1993-1996 Id Software, Inc.
 // Copyright (C) 2019-2020 Nobuaki Tanaka
 //
@@ -20,6 +20,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using ManagedDoom.Compatibility;
 using ManagedDoom.Compatibility.Boom.Rendering;
+using ManagedDoom.Compatibility.Mbf.Rendering;
 
 namespace ManagedDoom.Video
 {
@@ -1392,7 +1393,7 @@ namespace ManagedDoom.Video
             //
 
             var wallTexture = textures[world.Specials.TextureTranslation[side.MiddleTexture]];
-            var wallWidthMask = wallTexture.Width - 1;
+            var wallWidthMask = DoomTextureWidthMask.Resolve(wallTexture.Width);
 
             Fixed middleTextureAlt;
             if ((line.Flags & LineFlags.DontPegBottom) != 0)
@@ -1549,7 +1550,7 @@ namespace ManagedDoom.Video
                 {
                     var cy1 = upperClip[x] + 1;
                     var cy2 = Math.Min(drawWallY1 - 1, lowerClip[x] - 1);
-                    DrawCeilingColumn(frontState.CeilingPlaneSector, ceilingFlat, ceilingPlaneLights, x, cy1, cy2, frontSectorCeilingHeight);
+                    DrawCeilingColumn(frontState.CeilingPlaneSector, frontState.Sector, ceilingFlat, ceilingPlaneLights, x, cy1, cy2, frontSectorCeilingHeight);
                 }
 
                 if (drawWall)
@@ -1588,7 +1589,7 @@ namespace ManagedDoom.Video
                 {
                     var fy1 = Math.Max(drawWallY2 + 1, upperClip[x] + 1);
                     var fy2 = lowerClip[x] - 1;
-                    DrawFloorColumn(frontState.FloorPlaneSector, floorFlat, floorPlaneLights, x, fy1, fy2, frontSectorFloorHeight);
+                    DrawFloorColumn(frontState.FloorPlaneSector, frontState.Sector, floorFlat, floorPlaneLights, x, fy1, fy2, frontSectorFloorHeight);
                 }
 
                 scaleInterpolator.Advance();
@@ -1703,7 +1704,7 @@ namespace ManagedDoom.Video
             if (drawUpperWall)
             {
                 upperWallTexture = textures[world.Specials.TextureTranslation[side.TopTexture]];
-                upperWallWidthMask = upperWallTexture.Width - 1;
+                upperWallWidthMask = DoomTextureWidthMask.Resolve(upperWallTexture.Width);
 
                 if ((line.Flags & LineFlags.DontPegTop) != 0)
                 {
@@ -1723,7 +1724,7 @@ namespace ManagedDoom.Video
             if (drawLowerWall)
             {
                 lowerWallTexture = textures[world.Specials.TextureTranslation[side.BottomTexture]];
-                lowerWallWidthMask = lowerWallTexture.Width - 1;
+                lowerWallWidthMask = DoomTextureWidthMask.Resolve(lowerWallTexture.Width);
 
                 if ((line.Flags & LineFlags.DontPegBottom) != 0)
                 {
@@ -2003,7 +2004,7 @@ namespace ManagedDoom.Video
                     {
                         var cy1 = upperClip[x] + 1;
                         var cy2 = Math.Min(drawWallY1 - 1, lowerClip[x] - 1);
-                        DrawCeilingColumn(frontState.CeilingPlaneSector, ceilingFlat, ceilingPlaneLights, x, cy1, cy2, frontSectorCeilingHeight);
+                        DrawCeilingColumn(frontState.CeilingPlaneSector, frontState.Sector, ceilingFlat, ceilingPlaneLights, x, cy1, cy2, frontSectorCeilingHeight);
                     }
 
                     var wy1 = Math.Max(drawUpperWallY1, upperClip[x] + 1);
@@ -2033,7 +2034,7 @@ namespace ManagedDoom.Video
                 {
                     var cy1 = upperClip[x] + 1;
                     var cy2 = Math.Min(drawWallY1 - 1, lowerClip[x] - 1);
-                    DrawCeilingColumn(frontState.CeilingPlaneSector, ceilingFlat, ceilingPlaneLights, x, cy1, cy2, frontSectorCeilingHeight);
+                    DrawCeilingColumn(frontState.CeilingPlaneSector, frontState.Sector, ceilingFlat, ceilingPlaneLights, x, cy1, cy2, frontSectorCeilingHeight);
 
                     if (upperClip[x] < cy2)
                     {
@@ -2066,7 +2067,7 @@ namespace ManagedDoom.Video
                     {
                         var fy1 = Math.Max(drawWallY2 + 1, upperClip[x] + 1);
                         var fy2 = lowerClip[x] - 1;
-                        DrawFloorColumn(frontState.FloorPlaneSector, floorFlat, floorPlaneLights, x, fy1, fy2, frontSectorFloorHeight);
+                        DrawFloorColumn(frontState.FloorPlaneSector, frontState.Sector, floorFlat, floorPlaneLights, x, fy1, fy2, frontSectorFloorHeight);
                     }
 
                     if (lowerClip[x] > wy1)
@@ -2080,7 +2081,7 @@ namespace ManagedDoom.Video
                 {
                     var fy1 = Math.Max(drawWallY2 + 1, upperClip[x] + 1);
                     var fy2 = lowerClip[x] - 1;
-                    DrawFloorColumn(frontState.FloorPlaneSector, floorFlat, floorPlaneLights, x, fy1, fy2, frontSectorFloorHeight);
+                    DrawFloorColumn(frontState.FloorPlaneSector, frontState.Sector, floorFlat, floorPlaneLights, x, fy1, fy2, frontSectorFloorHeight);
 
                     if (lowerClip[x] > drawWallY2 + 1)
                     {
@@ -2163,23 +2164,31 @@ namespace ManagedDoom.Video
 
             var wallLights = scaleLight[Math.Clamp(wallLightLevel, 0, lightLevelCount - 1)];
 
-            var wallTexture = textures[world.Specials.TextureTranslation[seg.SideDef.MiddleTexture]];
-            var mask = wallTexture.Width - 1;
+            var maskedTextureNumber = MbfMaskedAnimationCompatibility.ResolveTwoSidedMiddleTexture(
+                world.Options.Compatibility,
+                world.Options.MbfOptions.CompMaskedAnim,
+                seg.SideDef.MiddleTexture,
+                world.Specials.TextureTranslation);
+            var wallTexture = textures[maskedTextureNumber];
+            var mask = DoomTextureWidthMask.Resolve(wallTexture.Width);
 
-            Fixed midTextureAlt;
-            if ((seg.LineDef.Flags & LineFlags.DontPegBottom) != 0)
-            {
-                midTextureAlt = drawSeg.FrontSectorFloorHeight > drawSeg.BackSectorFloorHeight
-                    ? drawSeg.FrontSectorFloorHeight : drawSeg.BackSectorFloorHeight;
-                midTextureAlt = midTextureAlt + Fixed.FromInt(wallTexture.Height) - viewZ;
-            }
-            else
-            {
-                midTextureAlt = drawSeg.FrontSectorCeilingHeight < drawSeg.BackSectorCeilingHeight
-                    ? drawSeg.FrontSectorCeilingHeight : drawSeg.BackSectorCeilingHeight;
-                midTextureAlt = midTextureAlt - viewZ;
-            }
-            midTextureAlt += seg.SideDef.RowOffset;
+            // The drawseg stores fake/transfer-height portal geometry for clipping,
+            // but Boom pegs masked middle textures to the original sector planes.
+            // Keep those two coordinate spaces separate.
+            var realFrontFloor = seg.FrontSector.GetInterpolatedFloorHeight(frameFrac);
+            var realFrontCeiling = seg.FrontSector.GetInterpolatedCeilingHeight(frameFrac);
+            var realBackFloor = seg.BackSector.GetInterpolatedFloorHeight(frameFrac);
+            var realBackCeiling = seg.BackSector.GetInterpolatedCeilingHeight(frameFrac);
+
+            var midTextureAlt = BoomTransferHeightResolver.ResolveMaskedMiddleTextureAlt(
+                seg.LineDef.Flags,
+                realFrontFloor,
+                realFrontCeiling,
+                realBackFloor,
+                realBackCeiling,
+                wallTexture.Height,
+                seg.SideDef.RowOffset,
+                viewZ);
 
             var scaleInterpolator = new FixedRangeInterpolator(
                 drawSeg.Scale1,
@@ -2244,20 +2253,29 @@ namespace ManagedDoom.Video
             }
         }
 
-        private void DrawCeilingColumn(Sector sector, Flat flat, int[] planeLights, int x, int y1, int y2, Fixed ceilingHeight)
+        private void DrawCeilingColumn(
+            Sector sector,
+            Sector skySector,
+            Flat flat,
+            int[] planeLights,
+            int x,
+            int y1,
+            int y2,
+            Fixed ceilingHeight)
         {
             if (screen.ColorMode == ColorMode.TrueColor)
             {
-                DrawCeilingColumnTrueColor(sector, flat, planeLights, x, y1, y2, ceilingHeight);
+                DrawCeilingColumnTrueColor(sector, skySector, flat, planeLights, x, y1, y2, ceilingHeight);
             }
             else
             {
-                DrawCeilingColumnIndexed(sector, flat, planeLights, x, y1, y2, ceilingHeight);
+                DrawCeilingColumnIndexed(sector, skySector, flat, planeLights, x, y1, y2, ceilingHeight);
             }
         }
 
         private void DrawCeilingColumnIndexed(
             Sector sector,
+            Sector skySector,
             Flat flat,
             int[] planeLights,
             int x,
@@ -2267,7 +2285,7 @@ namespace ManagedDoom.Video
         {
             if (flat == flats.SkyFlat)
             {
-                DrawSkyColumn(x, y1, y2);
+                DrawSkyColumn(skySector, x, y1, y2);
                 return;
             }
 
@@ -2377,6 +2395,7 @@ namespace ManagedDoom.Video
         
         private void DrawCeilingColumnTrueColor(
             Sector sector,
+            Sector skySector,
             Flat flat,
             int[] planeLights,
             int x,
@@ -2386,7 +2405,7 @@ namespace ManagedDoom.Video
         {
             if (flat == flats.SkyFlat)
             {
-                DrawSkyColumn(x, y1, y2);
+                DrawSkyColumn(skySector, x, y1, y2);
                 return;
             }
 
@@ -2494,20 +2513,29 @@ namespace ManagedDoom.Video
             ceilingPrevHeight = ceilingHeight;
         }
 
-        private void DrawFloorColumn(Sector sector, Flat flat, int[] planeLights, int x, int y1, int y2, Fixed floorHeight)
+        private void DrawFloorColumn(
+            Sector sector,
+            Sector skySector,
+            Flat flat,
+            int[] planeLights,
+            int x,
+            int y1,
+            int y2,
+            Fixed floorHeight)
         {
             if (screen.ColorMode == ColorMode.TrueColor)
             {
-                DrawFloorColumnTrueColor(sector, flat, planeLights, x, y1, y2, floorHeight);
+                DrawFloorColumnTrueColor(sector, skySector, flat, planeLights, x, y1, y2, floorHeight);
             }
             else
             {
-                DrawFloorColumnIndexed(sector, flat, planeLights, x, y1, y2, floorHeight);
+                DrawFloorColumnIndexed(sector, skySector, flat, planeLights, x, y1, y2, floorHeight);
             }
         }
         
         private void DrawFloorColumnIndexed(
             Sector sector,
+            Sector skySector,
             Flat flat,
             int[] planeLights,
             int x,
@@ -2517,7 +2545,7 @@ namespace ManagedDoom.Video
         {
             if (flat == flats.SkyFlat)
             {
-                DrawSkyColumn(x, y1, y2);
+                DrawSkyColumn(skySector, x, y1, y2);
                 return;
             }
 
@@ -2627,6 +2655,7 @@ namespace ManagedDoom.Video
         
         private void DrawFloorColumnTrueColor(
             Sector sector,
+            Sector skySector,
             Flat flat,
             int[] planeLights,
             int x,
@@ -2636,7 +2665,7 @@ namespace ManagedDoom.Video
         {
             if (flat == flats.SkyFlat)
             {
-                DrawSkyColumn(x, y1, y2);
+                DrawSkyColumn(skySector, x, y1, y2);
                 return;
             }
 
@@ -2974,12 +3003,35 @@ namespace ManagedDoom.Video
             }
         }
 
-        private void DrawSkyColumn(int x, int y1, int y2)
+        private void DrawSkyColumn(Sector sector, int x, int y1, int y2)
         {
-            var angle = (viewAngle + xToAngle[x]).Data >> angleToSkyShift;
-            var mask = world.Map.SkyTexture.Width - 1;
-            var source = world.Map.SkyTexture.Composite.Columns[angle & mask];
-            DrawColumn(source[0], 0, x, y1, y2, skyInvScale, skyTextureAlt);
+            var texture = world.Map.SkyTexture;
+            var textureAlt = skyTextureAlt;
+            var angle = viewAngle + xToAngle[x];
+
+            if (MbfSkyTransferResolver.TryResolveRenderState(
+                    sector,
+                    world.Specials.TextureTranslation,
+                    textures.Count,
+                    out var transfer))
+            {
+                texture = textures[transfer.TextureNumber];
+                textureAlt = transfer.TextureAlt;
+                angle = MbfSkyTransferResolver.ResolveSkyAngle(angle, transfer);
+            }
+
+            var column = (int)(angle.Data >> angleToSkyShift);
+            var mask = DoomTextureWidthMask.Resolve(texture.Width);
+            var columns = texture.Composite.Columns[column & mask];
+            if (columns.Length == 0)
+                return;
+
+            var skyColorMap = MbfSkyMapCompatibility.ResolveSkyColorMapIndex(
+                world.Options.Compatibility,
+                world.Options.MbfOptions.CompSkyMap,
+                fixedColorMap);
+
+            DrawColumn(columns[0], skyColorMap, x, y1, y2, skyInvScale, textureAlt);
         }
 
         private void DrawMaskedColumn(
@@ -3227,9 +3279,22 @@ namespace ManagedDoom.Video
                 return;
             }
 
+            var spriteNumber = (int)thing.Sprite;
+            if ((uint)spriteNumber >= (uint)Sprite.Count)
+            {
+                return;
+            }
+
             var spriteDef = sprites[thing.Sprite];
             var frameNumber = thing.Frame & 0x7F;
-            var spriteFrame = spriteDef.Frames[frameNumber];
+
+            // Boom/MBF deliberately use empty sprite definitions (notably TNT1)
+            // for invisible actor states. They are valid simulation states and must
+            // simply contribute no vissprite instead of indexing Frames[0].
+            if (spriteDef == null || !spriteDef.TryGetFrame(frameNumber, out var spriteFrame))
+            {
+                return;
+            }
 
             Patch lump;
             bool flip;
@@ -3289,6 +3354,7 @@ namespace ManagedDoom.Video
             visSpriteCount++;
 
             vis.MobjFlags = thing.Flags;
+            vis.Translucent = thing.Translucent;
             vis.Scale = xScale;
             vis.GlobalX = thingX;
             vis.GlobalY = thingY;
@@ -3446,6 +3512,29 @@ namespace ManagedDoom.Video
                         frac += sprite.InvScale;
                     }
                 }
+                else if (sprite.Translucent)
+                {
+                    var frac = sprite.StartFrac;
+
+                    for (var x = sprite.X1; x <= sprite.X2; x++)
+                    {
+                        var textureColumn = frac.ToIntFloor();
+
+                        DrawMaskedColumnTranslucent(
+                            patchColumns[textureColumn],
+                            sprite.ColorMap,
+                            x,
+                            topY,
+                            sprite.Scale,
+                            absInvScale,
+                            sprite.TextureAlt,
+                            upperClip[x],
+                            lowerClip[x],
+                            defaultTranslucencyMap);
+
+                        frac += sprite.InvScale;
+                    }
+                }
                 else
                 {
                     var frac = sprite.StartFrac;
@@ -3468,8 +3557,12 @@ namespace ManagedDoom.Video
         {
             // Decide which patch to use.
             var spriteDef = sprites[psp.State.Sprite];
+            var frameNumber = psp.State.Frame & 0x7fff;
 
-            var spriteFrame = spriteDef.Frames[psp.State.Frame & 0x7fff];
+            if (spriteDef == null || !spriteDef.TryGetFrame(frameNumber, out var spriteFrame))
+            {
+                return;
+            }
 
             var lump = spriteFrame.Patches[0];
             var flip = spriteFrame.Flip[0];
@@ -3497,6 +3590,7 @@ namespace ManagedDoom.Video
             // Store information in a vissprite.
             var vis = weaponSprite;
             vis.MobjFlags = 0;
+            vis.Translucent = false;
             // The code below is based on Crispy Doom's weapon rendering code.
             vis.TextureAlt = Fixed.FromInt(100) + Fixed.One / 4 - (psp.Sy - Fixed.FromInt(lump.TopOffset));
             vis.X1 = x1 < 0 ? 0 : x1;
@@ -3874,6 +3968,7 @@ namespace ManagedDoom.Video
             public int ColorMap;
 
             public MobjFlags MobjFlags;
+            public bool Translucent;
         }
 
         private class VisSpriteComparer : IComparer<VisSprite>

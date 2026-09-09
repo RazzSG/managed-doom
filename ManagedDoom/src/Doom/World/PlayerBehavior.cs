@@ -20,7 +20,8 @@ using ManagedDoom.Compatibility;
 using ManagedDoom.Compatibility.Boom.Friction;
 using ManagedDoom.Compatibility.Boom.Movement;
 using ManagedDoom.Compatibility.Boom.Sectors;
-using ManagedDoom.Compatibility.Boom.Gameplay;
+using ManagedDoom.Compatibility.Mbf.Gameplay;
+using ManagedDoom.Compatibility.Mbf.Movement;
 
 namespace ManagedDoom
 {
@@ -182,12 +183,14 @@ namespace ManagedDoom
                 player.Powers[(int)PowerType.Strength]++;
             }
 
-            if (player.Powers[(int)PowerType.Invulnerability] > 0)
+            if (MbfPowerupCheatCompatibility.ShouldTickDown(
+                player.Powers[(int)PowerType.Invulnerability]))
             {
                 player.Powers[(int)PowerType.Invulnerability]--;
             }
 
-            if (player.Powers[(int)PowerType.Invisibility] > 0)
+            if (MbfPowerupCheatCompatibility.ShouldTickDown(
+                player.Powers[(int)PowerType.Invisibility]))
             {
                 if (--player.Powers[(int)PowerType.Invisibility] == 0)
                 {
@@ -195,12 +198,14 @@ namespace ManagedDoom
                 }
             }
 
-            if (player.Powers[(int)PowerType.Infrared] > 0)
+            if (MbfPowerupCheatCompatibility.ShouldTickDown(
+                player.Powers[(int)PowerType.Infrared]))
             {
                 player.Powers[(int)PowerType.Infrared]--;
             }
 
-            if (player.Powers[(int)PowerType.IronFeet] > 0)
+            if (MbfPowerupCheatCompatibility.ShouldTickDown(
+                player.Powers[(int)PowerType.IronFeet]))
             {
                 player.Powers[(int)PowerType.IronFeet]--;
             }
@@ -216,7 +221,8 @@ namespace ManagedDoom
             }
 
             // Handling colormaps.
-            if (player.Powers[(int)PowerType.Invulnerability] > 0)
+            if (MbfPowerupCheatCompatibility.IsActive(
+                player.Powers[(int)PowerType.Invulnerability]))
             {
                 if (player.Powers[(int)PowerType.Invulnerability] > 4 * 32 ||
                     (player.Powers[(int)PowerType.Invulnerability] & 8) != 0)
@@ -228,7 +234,8 @@ namespace ManagedDoom
                     player.FixedColorMap = 0;
                 }
             }
-            else if (player.Powers[(int)PowerType.Infrared] > 0)
+            else if (MbfPowerupCheatCompatibility.IsActive(
+                player.Powers[(int)PowerType.Infrared]))
             {
                 if (player.Powers[(int)PowerType.Infrared] > 4 * 32 ||
                     (player.Powers[(int)PowerType.Infrared] & 8) != 0)
@@ -264,7 +271,7 @@ namespace ManagedDoom
             // Do not let the player control movement if not onground.
             onGround = (player.Mobj.Z <= player.Mobj.FloorZ);
 
-            var moveFactor = new Fixed(2048);
+            var moveFactor = BoomFrictionTranslator.OriginalMoveFactor;
             if (onGround &&
                 (cmd.ForwardMove != 0 || cmd.SideMove != 0) &&
                 GameCompatibilityFeatures.SupportsBoom(world.Options.Compatibility))
@@ -272,13 +279,26 @@ namespace ManagedDoom
                 moveFactor = BoomSectorFriction.GetMoveFactor(player.Mobj);
             }
 
+            var bobMoveFactor = MbfPlayerBobbing.GetEffortMoveFactor(
+                player.Mobj, moveFactor, world.Options.Compatibility);
+
             if (cmd.ForwardMove != 0 && onGround)
             {
+                if (MbfPlayerBobbing.Applies(world.Options.Compatibility))
+                {
+                    BobThrust(player, player.Mobj.Angle, bobMoveFactor * cmd.ForwardMove);
+                }
+
                 Thrust(player, player.Mobj.Angle, moveFactor * cmd.ForwardMove);
             }
 
             if (cmd.SideMove != 0 && onGround)
             {
+                if (MbfPlayerBobbing.Applies(world.Options.Compatibility))
+                {
+                    BobThrust(player, player.Mobj.Angle - Angle.Ang90, bobMoveFactor * cmd.SideMove);
+                }
+
                 Thrust(player, player.Mobj.Angle - Angle.Ang90, moveFactor * cmd.SideMove);
             }
 
@@ -297,7 +317,14 @@ namespace ManagedDoom
         {
             // Regular movement bobbing.
             // It needs to be calculated for gun swing even if not on ground.
-            player.Bob = player.Mobj.MomX * player.Mobj.MomX + player.Mobj.MomY * player.Mobj.MomY;
+            if (MbfPlayerBobbing.Applies(world.Options.Compatibility))
+            {
+                player.Bob = player.BobMomX * player.BobMomX + player.BobMomY * player.BobMomY;
+            }
+            else
+            {
+                player.Bob = player.Mobj.MomX * player.Mobj.MomX + player.Mobj.MomY * player.Mobj.MomY;
+            }
             player.Bob >>= 2;
             var bobLimit = BoomMovementQuirks.GetPlayerBobLimit(
                 player.Mobj, maxBob, world.Options.Compatibility);
@@ -374,6 +401,12 @@ namespace ManagedDoom
             player.Mobj.MomY += move * Trig.Sin(angle);
         }
 
+        private static void BobThrust(Player player, Angle angle, Fixed move)
+        {
+            player.BobMomX += move * Trig.Cos(angle);
+            player.BobMomY += move * Trig.Sin(angle);
+        }
+
 
         /// <summary>
         /// Called every tic frame that the player origin is in a special sector.
@@ -446,8 +479,10 @@ namespace ManagedDoom
                     break;
 
                 case 11:
-                    // Exit super damage for E1M8 finale. Boom no longer clears god mode here.
-                    if (BoomGameplayBugFixes.ClearsGodModeInExitDamageSector(world.Options.Compatibility))
+                    // Exit super damage for E1M8 finale. MBF comp_god can restore Doom's god-mode clearing quirk.
+                    if (MbfGodModeCompatibility.ClearsGodModeInExitDamageSector(
+                            world.Options.Compatibility,
+                            world.Options.MbfOptions.CompGod))
                     {
                         player.Cheats &= ~CheatFlags.GodMode;
                     }

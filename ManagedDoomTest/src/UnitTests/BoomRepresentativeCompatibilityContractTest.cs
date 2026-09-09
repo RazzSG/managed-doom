@@ -172,7 +172,8 @@ public sealed class BoomRepresentativeCompatibilityContractTest
                 $"Runtime collision hook / {compatibility}");
 
             // ZMovement call-site: Doom II 1.9 keeps the old zeroed impulse in
-            // Vanilla, while Boom and all descendants use the corrected bounce.
+            // Vanilla. Boom fixes the bounce, while MBF/MBF21 default comp_soul=1
+            // deliberately restores the original buggy ordering.
             var skull = new Mobj(world)
             {
                 FloorZ = Fixed.Zero,
@@ -185,8 +186,10 @@ public sealed class BoomRepresentativeCompatibilityContractTest
 
             world.ThingMovement.ZMovement(skull);
 
+            var correctedLostSoulBounce = compatibility == GameCompatibility.Boom;
+
             Assert.AreEqual(
-                boom ? Fixed.FromInt(2).Data : Fixed.Zero.Data,
+                correctedLostSoulBounce ? Fixed.FromInt(2).Data : Fixed.Zero.Data,
                 skull.MomZ.Data,
                 $"Runtime Lost Soul hook / {compatibility}");
         }

@@ -1,4 +1,5 @@
 using System;
+using ManagedDoom.Compatibility;
 
 namespace ManagedDoom.Compatibility.Boom.Pushers;
 
@@ -45,6 +46,32 @@ public static class BoomPusherTranslator
         var speed = magnitude - (distance >> 1);
 
         return new Fixed(speed << (Fixed.FracBits - PushFactor - 1));
+    }
+
+    public static Fixed ResolvePointSpeed(
+        GameCompatibility compatibility,
+        int magnitude,
+        Fixed dx,
+        Fixed dy)
+    {
+        return GameCompatibilityFeatures.SupportsMbf(compatibility)
+            ? ResolveMbfPointSpeed(magnitude, dx, dy)
+            : ResolvePointSpeed(magnitude, dx, dy);
+    }
+
+    public static Fixed ResolveMbfPointSpeed(int magnitude, Fixed dx, Fixed dy)
+    {
+        // MBF keeps Boom's original linear formula as the effective-radius gate,
+        // then replaces the in-range strength with inverse-square falloff.
+        if (ResolvePointSpeed(magnitude, dx, dy) <= Fixed.Zero)
+            return Fixed.Zero;
+
+        var x = dx.Data >> Fixed.FracBits;
+        var y = dy.Data >> Fixed.FracBits;
+        var denominator = ((long)x * x) + ((long)y * y) + 1;
+        var speed = ((long)magnitude << 23) / denominator;
+
+        return new Fixed(unchecked((int)speed));
     }
 
     private static int AproxDistance(int dx, int dy)

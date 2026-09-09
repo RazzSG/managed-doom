@@ -73,6 +73,10 @@ namespace ManagedDoom
         private Sector heightSector;
         private LineDef heightSectorLine;
 
+        // MBF 271/272 sky transfer. Keep the defining line live rather than copying
+        // its texture/offsets so Boom wall scrollers automatically animate the sky.
+        private LineDef skyTransferLine;
+
         // Boom flat scrollers keep their accumulated texture-space displacement on the sector.
         private Fixed floorXOffset;
         private Fixed floorYOffset;
@@ -305,6 +309,12 @@ namespace ManagedDoom
         {
             get => heightSectorLine;
             set => heightSectorLine = value;
+        }
+
+        public LineDef SkyTransferLine
+        {
+            get => skyTransferLine;
+            set => skyTransferLine = value;
         }
 
         public Fixed FloorXOffset

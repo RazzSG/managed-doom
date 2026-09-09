@@ -1,3 +1,5 @@
+using ManagedDoom.Compatibility.Mbf.Movement;
+
 namespace ManagedDoom.Compatibility.Boom.Scrolling;
 
 public sealed class BoomScroller : Thinker
@@ -123,20 +125,28 @@ public sealed class BoomScroller : Thinker
     {
         var floorHeight = sector.FloorHeight;
 
-        foreach (var thing in sector)
+        // Boom scrollers use the sector's touching-thing list rather than its
+        // subsector/origin thing list. An object can have its origin just across
+        // a sector boundary while its radius still overlaps the conveyor floor;
+        // it must continue receiving carry momentum until it no longer touches
+        // the affected sector.
+        for (var node = sector.TouchingThingList; node != null; node = node.SectorNext)
         {
+            var thing = node.Thing;
+
             if ((thing.Flags & MobjFlags.NoClip) != 0)
                 continue;
 
             // Boom's basic conveyor rule: carry clipped, gravity-affected things
             // that are on (or marginally below) the affected sector floor.
-            // Deep-water carrying depends on transfer-height/touching-sector state
-            // and is intentionally left for the later compatibility-polish pass.
+            // Deep-water carrying through a height sector remains a separate
+            // compatibility-polish item.
             if ((thing.Flags & MobjFlags.NoGravity) != 0 || thing.Z > floorHeight)
                 continue;
 
             thing.MomX += scrollDx;
             thing.MomY += scrollDy;
+            MbfLedgeBlockCompatibility.MarkScrollingMovement(thing, scrollDx, scrollDy);
         }
     }
 

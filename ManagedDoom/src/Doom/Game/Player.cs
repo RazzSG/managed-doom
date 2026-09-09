@@ -55,6 +55,13 @@ namespace ManagedDoom
         // Bounded / scaled total momentum.
         private Fixed bob;
 
+        // Boom 2.02 and later keep separate player-applied momentum for
+        // view/psprite bobbing. Unlike physical mobj momentum, this is unaffected
+        // by icy-floor coasting and therefore reflects movement effort rather
+        // than drift.
+        private Fixed bobMomX;
+        private Fixed bobMomY;
+
         // This is only used between levels,
         // mobj.Health is used during levels.
         private int health;
@@ -162,6 +169,8 @@ namespace ManagedDoom
             viewHeight = Fixed.Zero;
             deltaViewHeight = Fixed.Zero;
             bob = Fixed.Zero;
+            bobMomX = Fixed.Zero;
+            bobMomY = Fixed.Zero;
 
             health = 0;
             armorPoints = 0;
@@ -227,6 +236,8 @@ namespace ManagedDoom
             viewHeight = Fixed.Zero;
             deltaViewHeight = Fixed.Zero;
             bob = Fixed.Zero;
+            bobMomX = Fixed.Zero;
+            bobMomY = Fixed.Zero;
 
             health = DoomInfo.DeHackEdConst.InitialHealth;
             armorPoints = 0;
@@ -410,6 +421,18 @@ namespace ManagedDoom
         {
             get => bob;
             set => bob = value;
+        }
+
+        public Fixed BobMomX
+        {
+            get => bobMomX;
+            set => bobMomX = value;
+        }
+
+        public Fixed BobMomY
+        {
+            get => bobMomY;
+            set => bobMomY = value;
         }
 
         public int Health

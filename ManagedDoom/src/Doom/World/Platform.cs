@@ -16,7 +16,7 @@
 
 
 using System;
-using ManagedDoom.Compatibility.Boom.Sectors;
+using ManagedDoom.Compatibility.Mbf.Sectors;
 
 namespace ManagedDoom
 {
@@ -127,8 +127,9 @@ namespace ManagedDoom
 
 						if ((type == PlatformType.RaiseAndChange ||
 							type == PlatformType.RaiseToNearestAndChange) &&
-							BoomClassicMoverCompatibility.RemovesBouncedPureRaisePlatform(
-								world.Options.Compatibility))
+							MbfFloorCompatibility.RemovesBouncedPureRaisePlatform(
+								world.Options.Compatibility,
+								world.Options.MbfOptions.CompFloors))
 						{
 							sa.RemoveActivePlatform(this);
 							sector.DisableFrameInterpolationForOneFrame();

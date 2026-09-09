@@ -43,6 +43,8 @@ namespace ManagedDoom
         private int damage;
         private Sfx activeSound;
         private MobjFlags flags;
+        private bool translucent;
+        private bool hasDeHackEdBitsOverride;
         private MobjState raiseState;
 
         public MobjInfo(
@@ -225,6 +227,27 @@ namespace ManagedDoom
         {
             get => flags;
             set => flags = value;
+        }
+
+        /// <summary>
+        /// Explicit Doom/Boom MF_TRANSLUCENT state. It is kept separate from
+        /// MobjFlags because this port already uses the 0x40000000 storage bit
+        /// internally for MBF Friend.
+        /// </summary>
+        public bool Translucent
+        {
+            get => translucent;
+            set => translucent = value;
+        }
+
+        /// <summary>
+        /// PrBoom only toggles its 17 predefined translucent Things when a
+        /// DeHackEd Thing block did not replace Bits for that actor.
+        /// </summary>
+        public bool HasDeHackEdBitsOverride
+        {
+            get => hasDeHackEdBitsOverride;
+            set => hasDeHackEdBitsOverride = value;
         }
 
         public MobjState Raisestate

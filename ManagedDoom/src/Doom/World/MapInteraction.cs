@@ -19,6 +19,9 @@ using System;
 using ManagedDoom.Compatibility;
 using ManagedDoom.Compatibility.Boom;
 using ManagedDoom.Compatibility.Boom.Lines;
+using ManagedDoom.Compatibility.Mbf.Audio;
+using ManagedDoom.Compatibility.Mbf.Gameplay;
+using ManagedDoom.Compatibility.Mbf.Lines;
 
 namespace ManagedDoom
 {
@@ -43,10 +46,12 @@ namespace ManagedDoom
 
 		private Mobj useThing;
 		private Func<Intercept, bool> useTraverseFunc;
+		private Func<Intercept, bool> noWayTraverseFunc;
 
 		private void InitUse()
 		{
 			useTraverseFunc = UseTraverse;
+			noWayTraverseFunc = NoWayTraverse;
 		}
 
 		private bool UseTraverse(Intercept intercept)
@@ -83,6 +88,26 @@ namespace ManagedDoom
 				world.Options.Compatibility);
 		}
 
+		private bool NoWayTraverse(Intercept intercept)
+		{
+			var line = intercept.Line;
+
+			// The second PrBoom use trace only diagnoses ordinary blocking geometry.
+			// Specials were already considered by the primary use trace.
+			if (line.Special != 0)
+				return true;
+
+			if ((line.Flags & LineFlags.Blocking) != 0)
+				return false;
+
+			var mc = world.MapCollision;
+			mc.LineOpening(line);
+
+			return mc.OpenRange > Fixed.Zero &&
+				mc.OpenBottom <= useThing.Z + Fixed.FromInt(24) &&
+				mc.OpenTop >= useThing.Z + useThing.Height;
+		}
+
 		/// <summary>
 		/// Looks for special lines in front of the player to activate.
 		/// </summary>
@@ -99,7 +124,22 @@ namespace ManagedDoom
 			var x2 = x1 + useRange.ToIntFloor() * Trig.Cos(angle);
 			var y2 = y1 + useRange.ToIntFloor() * Trig.Sin(angle);
 
-			pt.PathTraverse(x1, y1, x2, y2, PathTraverseFlags.AddLines, useTraverseFunc);
+			var traversed = pt.PathTraverse(
+				x1, y1, x2, y2,
+				PathTraverseFlags.AddLines,
+				useTraverseFunc);
+
+			if (traversed &&
+				MbfSoundCompatibility.UsesTwoSidedUseNoWayFix(
+					world.Options.Compatibility,
+					world.Options.MbfOptions.CompSound) &&
+				!pt.PathTraverse(
+					x1, y1, x2, y2,
+					PathTraverseFlags.AddLines,
+					noWayTraverseFunc))
+			{
+				world.StartSound(useThing, Sfx.NOWAY, SfxType.Voice);
+			}
 		}
 
 		/// <summary>
@@ -155,8 +195,12 @@ namespace ManagedDoom
 			}
 
 			// Boom P_CheckTag: regular activatable specials with tag 0 are
-			// ignored unless they belong to Boom's explicit zero-tag whitelist.
-			if (!BoomTagRules.CanActivate(line, world.Options.Compatibility))
+			// ignored unless whitelisted. MBF comp_zerotags deliberately restores
+			// the Doom behavior that lets regular tagged actions operate on tag 0.
+			if (!MbfZeroTagCompatibility.CanActivateRegularLine(
+				line,
+				world.Options.Compatibility,
+				world.Options.MbfOptions.CompZeroTags))
 			{
 				return false;
 			}
@@ -633,7 +677,10 @@ namespace ManagedDoom
 				}
 			}
 
-			if (!BoomTagRules.CanActivate(line, world.Options.Compatibility))
+			if (!MbfZeroTagCompatibility.CanActivateRegularLine(
+				line,
+				world.Options.Compatibility,
+				world.Options.MbfOptions.CompZeroTags))
 			{
 				return;
 			}
@@ -779,8 +826,15 @@ namespace ManagedDoom
 					break;
 
 				case 52:
-					// Do exit.
-					world.ExitLevel();
+					// Do exit. MBF comp_zombie = 0 prevents zero-health players
+					// from completing line-triggered exits.
+					if (MbfZombieExitCompatibility.CanTriggerLineExit(
+							world.Options.Compatibility,
+							world.Options.MbfOptions.CompZombie,
+							thing))
+					{
+						world.ExitLevel();
+					}
 					break;
 
 				case 53:
@@ -863,7 +917,13 @@ namespace ManagedDoom
 
 				case 124:
 					// Secret exit.
-					world.SecretExitLevel();
+					if (MbfZombieExitCompatibility.CanTriggerLineExit(
+							world.Options.Compatibility,
+							world.Options.MbfOptions.CompZombie,
+							thing))
+					{
+						world.SecretExitLevel();
+					}
 					break;
 
 				case 125:
@@ -1089,7 +1149,10 @@ namespace ManagedDoom
 				}
 			}
 
-			if (!BoomTagRules.CanActivate(line, world.Options.Compatibility))
+			if (!MbfZeroTagCompatibility.CanActivateRegularLine(
+				line,
+				world.Options.Compatibility,
+				world.Options.MbfOptions.CompZeroTags))
 			{
 				return;
 			}

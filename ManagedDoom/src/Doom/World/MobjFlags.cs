@@ -123,6 +123,11 @@ namespace ManagedDoom
         // use a translation table for player colormaps
         Translation = 0xc000000,
 
+        // MBF runtime actor flags.
+        Touchy = 0x10000000,
+        Bounces = 0x20000000,
+        Friend = 0x40000000,
+
         // Hmm ???.
         TransShift = 26
     }

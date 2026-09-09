@@ -33,16 +33,51 @@ public static class CompatibilityFeatureScanner
     private const ushort BoomGeneralizedSpecialFirst = 0x2F80;
     private const ushort BoomGeneralizedSpecialLast = 0x7FFF;
 
-    public static bool TryDetect(Wad wad, out GameCompatibility compatibility)
+    public static bool TryDetect(Wad wad, out GameCompatibility compatibility) =>
+        TryDetect(wad, null, out compatibility);
+
+    public static bool TryDetect(
+        Wad wad,
+        CommandLineArgs args,
+        out GameCompatibility compatibility)
     {
         if (wad == null)
             throw new ArgumentNullException(nameof(wad));
 
+        var hasMbfResource = wad.GetLumpNumber("OPTIONS") != -1;
         var hasBoomResource =
             wad.GetLumpNumber("SWITCHES") != -1 ||
             wad.GetLumpNumber("ANIMATED") != -1;
-        compatibility = hasBoomResource ? GameCompatibility.Boom : GameCompatibility.Vanilla;
-        var found = hasBoomResource;
+
+        compatibility = hasMbfResource
+            ? GameCompatibility.Mbf
+            : hasBoomResource
+                ? GameCompatibility.Boom
+                : GameCompatibility.Vanilla;
+        var found = hasMbfResource || hasBoomResource;
+
+        // Runtime -nodeh suppresses embedded DEHACKED lumps, so Auto detection
+        // must not promote compatibility from a patch that will not be applied.
+        // Explicit -deh files are a separate input path and remain active even
+        // with -nodeh, matching DeHackEd.Initialize().
+        if ((args == null || !args.nodeh.Present) &&
+            DeHackEdCompatibilityFeatureScanner.TryDetect(wad, out var definitionCompatibility))
+        {
+            if (definitionCompatibility > compatibility)
+                compatibility = definitionCompatibility;
+
+            found = true;
+        }
+
+        if (args != null &&
+            DeHackEdCompatibilityFeatureScanner.TryDetectExternal(args, out var externalDefinitionCompatibility))
+        {
+            if (externalDefinitionCompatibility > compatibility)
+                compatibility = externalDefinitionCompatibility;
+
+            found = true;
+        }
+
         var scannedMapNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var lumps = wad.LumpInfos;
 
@@ -87,7 +122,13 @@ public static class CompatibilityFeatureScanner
         if (HasMbf21LineFeature(lineData) || HasMbf21SectorFeature(sectorData))
             return GameCompatibility.Mbf21;
 
-        if (HasMbfLineFeature(lineData) || HasMbfThingFeature(thingData))
+        // MBF gameplay compatibility must only be selected by features that
+        // actually require MBF actor semantics. Sky-transfer linedefs 271/272
+        // are widely used by WADs targeting the Boom/PrBoom compatibility
+        // profile; promoting the whole game to MBF here also enables MBF
+        // compatibility flags (for example comp_dropoff), which changes
+        // unrelated gameplay physics.
+        if (HasMbfThingFeature(thingData))
             return GameCompatibility.Mbf;
 
         if (HasBoomLineFeature(lineData) || HasBoomThingFeature(thingData) || HasBoomSectorFeature(sectorData))
@@ -113,22 +154,6 @@ public static class CompatibilityFeatureScanner
         return false;
     }
 
-    private static bool HasMbfLineFeature(byte[] data)
-    {
-        if (data.Length == 0 || data.Length % DoomLineDefSize != 0)
-            return false;
-
-        for (var offset = 0; offset < data.Length; offset += DoomLineDefSize)
-        {
-            var special = BinaryPrimitives.ReadUInt16LittleEndian(data.AsSpan(offset + DoomLineSpecialOffset, 2));
-
-            if (special is 271 or 272)
-                return true;
-        }
-
-        return false;
-    }
-
     private static bool HasBoomLineFeature(byte[] data)
     {
         if (data.Length == 0 || data.Length % DoomLineDefSize != 0)
@@ -141,6 +166,7 @@ public static class CompatibilityFeatureScanner
 
             if ((flags & BoomPassThruFlag) != 0 ||
                 IsBoomRegularSpecial(special) ||
+                IsBoomProfileSkyTransferSpecial(special) ||
                 special is >= BoomGeneralizedSpecialFirst and <= BoomGeneralizedSpecialLast)
             {
                 return true;
@@ -156,6 +182,15 @@ public static class CompatibilityFeatureScanner
         // Boom has two extended regular specials below the otherwise contiguous
         // 142-269 range: 78 (floor change) and 85 (scroll right).
         return special is 78 or 85 || special is >= BoomRegularSpecialFirst and <= BoomRegularSpecialLast;
+    }
+
+    private static bool IsBoomProfileSkyTransferSpecial(ushort special)
+    {
+        // 271/272 originated with MBF, but became common in maps advertised
+        // for the Boom/PrBoom compatibility profile. They are a rendering/map
+        // feature, not evidence that MBF gameplay compatibility options should
+        // be enabled globally.
+        return special is 271 or 272;
     }
 
     private static bool HasMbfThingFeature(byte[] data)

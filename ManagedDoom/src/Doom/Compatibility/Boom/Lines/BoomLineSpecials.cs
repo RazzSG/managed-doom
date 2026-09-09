@@ -1,3 +1,5 @@
+using ManagedDoom.Compatibility.Mbf.Gameplay;
+
 namespace ManagedDoom.Compatibility.Boom.Lines;
 
 public static class BoomLineSpecials
@@ -478,8 +480,15 @@ public static class BoomLineSpecials
 
         if (BoomExitTranslator.TryTranslate(line.Special, out var exit))
         {
-            if (!BoomTriggerSemantics.CanActivateFromShoot(exit.Trigger) || !CanActivateExit(thing))
+            if (!BoomTriggerSemantics.CanActivateFromShoot(exit.Trigger) ||
+                !CanActivateExit(thing) ||
+                !MbfZombieExitCompatibility.CanTriggerLineExit(
+                    world.Options.Compatibility,
+                    world.Options.MbfOptions.CompZombie,
+                    thing))
+            {
                 return true;
+            }
 
             BoomTriggerLifecycle.ApplySuccess(world, line, exit.Trigger);
 

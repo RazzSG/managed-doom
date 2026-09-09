@@ -120,6 +120,15 @@ namespace ManagedDoom
                     var frames = new SpriteFrame[list.Count];
                     for (var j = 0; j < frames.Length; j++)
                     {
+                        // A sprite may legitimately skip an intermediate frame
+                        // letter. Keep that slot null so callers can treat it as
+                        // non-renderable, while still rejecting an actually
+                        // incomplete rotation set for a frame that does exist.
+                        if (list[j].IsEmpty())
+                        {
+                            continue;
+                        }
+
                         list[j].CheckCompletion();
 
                         var frame = new SpriteFrame(list[j].HasRotation(), list[j].Patches, list[j].Flip);
@@ -214,6 +223,19 @@ namespace ManagedDoom
             {
                 Patches = new Patch[8];
                 Flip = new bool[8];
+            }
+
+            public bool IsEmpty()
+            {
+                for (var i = 0; i < Patches.Length; i++)
+                {
+                    if (Patches[i] != null)
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
             }
 
             public void CheckCompletion()

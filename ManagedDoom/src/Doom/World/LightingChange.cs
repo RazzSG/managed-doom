@@ -18,6 +18,7 @@
 using System;
 using ManagedDoom.Compatibility;
 using ManagedDoom.Compatibility.Boom.Sectors;
+using ManagedDoom.Compatibility.Mbf.Sectors;
 
 namespace ManagedDoom
 {
@@ -147,8 +148,8 @@ namespace ManagedDoom
 
         private Sector GetNextSector(LineDef line, Sector sector)
         {
-            return BoomSectorModelCompatibility.GetNextSector(
-                line, sector, world.Options.Compatibility);
+            return MbfSectorModelCompatibility.GetNextSector(
+                line, sector, world.Options.Compatibility, world.Options.MbfOptions.CompModel);
         }
     }
 }

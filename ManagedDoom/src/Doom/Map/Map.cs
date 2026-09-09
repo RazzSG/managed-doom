@@ -20,6 +20,7 @@ using System.Collections.Generic;
 using System.Runtime.ExceptionServices;
 using ManagedDoom.Compatibility;
 using ManagedDoom.Compatibility.Boom;
+using ManagedDoom.Compatibility.Mbf.Lines;
 
 namespace ManagedDoom
 {
@@ -95,6 +96,10 @@ namespace ManagedDoom
                 sectors = Sector.FromWad(wad, map + 8, flats);
                 sides = SideDef.FromWad(wad, map + 3, textures, sectors);
                 lines = LineDef.FromWad(wad, map + 2, vertices, sides);
+                MbfReservedLineFlagCompatibility.Apply(
+                    lines,
+                    options.Compatibility,
+                    options.MbfOptions.CompReservedLineFlag);
                 
                 var nodeData = MapNodeLoader.Load(wad, map, vertices, lines);
                 vertices = nodeData.Vertices;

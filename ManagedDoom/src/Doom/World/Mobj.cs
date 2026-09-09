@@ -17,8 +17,11 @@
 
 using System;
 using ManagedDoom.Compatibility;
+using ManagedDoom.Compatibility.Boom.Movement;
 using ManagedDoom.Compatibility.Boom.Pushers;
 using ManagedDoom.Compatibility.Boom.Sectors;
+using ManagedDoom.Compatibility.Mbf.Movement;
+using ManagedDoom.Compatibility.Mbf.Things;
 
 namespace ManagedDoom
 {
@@ -114,12 +117,14 @@ namespace ManagedDoom
         // Links in blocks (if needed).
         private Mobj blockNext;
         private Mobj blockPrev;
+        private int blockMapIndex = -1;
 
         private Subsector subsector;
 
         // The closest interval over all contacted Sectors.
         private Fixed floorZ;
         private Fixed ceilingZ;
+        private Fixed dropoffZ;
 
         // For movement checking.
         private Fixed radius;
@@ -139,11 +144,26 @@ namespace ManagedDoom
         private int tics; // State tic counter.
         private MobjStateDef state;
         private MobjFlags flags;
+        private bool translucent;
         private int health;
 
         // Movement direction, movement generation (zig-zagging).
         private Direction moveDir;
         private int moveCount; // When 0, select a new dir.
+
+        // MBF keeps backing/strafe lifetime separate from MoveCount so the
+        // actor can keep facing its target while moving away from it.
+        private int strafeCount;
+
+        // MBF periodically re-evaluates a chase target instead of doing a
+        // target search on every tic after Threshold expires.
+        private int pursueCount;
+
+        // Boom pseudo-torque state for inert objects hanging over ledges.
+        private int boomTorqueGear;
+        private bool boomLedgeFalling;
+        private bool mbfScrollingMovement;
+        private bool mbfTouchyArmed;
 
         // Thing being chased / attacked (or null),
         // also the originator for missiles.
@@ -170,6 +190,10 @@ namespace ManagedDoom
         // Thing being chased/attacked for tracers.
         private Mobj tracer;
 
+        // MBF remembers the previous hostile target so a monster can resume
+        // that fight after a temporary retaliation target is lost.
+        private Mobj lastEnemy;
+
         // For frame interpolation.
         private bool interpolate;
         private Fixed oldX;
@@ -188,6 +212,7 @@ namespace ManagedDoom
                 (flags & MobjFlags.SkullFly) != 0)
             {
                 world.ThingMovement.XYMovement(this);
+                MbfLedgeBlockCompatibility.ClearScrollingMovement(this);
 
                 if (ThinkerState == ThinkerState.Removed)
                 {
@@ -206,14 +231,37 @@ namespace ManagedDoom
                     return;
                 }
             }
-
-            // Boom constant pushers run after normal mobj movement. Applying the pre-resolved
-            // sector vectors here preserves that ordering without adding a per-tic sector scan.
-            if (player != null && GameCompatibilityFeatures.SupportsBoom(world.Options.Compatibility))
+            else if (GameCompatibilityFeatures.SupportsMbf(world.Options.Compatibility) &&
+                     momX == Fixed.Zero && momY == Fixed.Zero &&
+                     !BoomLedgeTorque.IsSentient(this))
             {
-                BoomSectorWind.Apply(this);
-                BoomSectorCurrent.Apply(this);
-                world.Specials.ApplyBoomPointPushers(this);
+                // MBF arms non-sentient TOUCHY-capable actors after they have
+                // come completely to rest. The marker is an internal runtime
+                // state, not part of the public DeHackEd flag word.
+                MbfTouchyCompatibility.ArmAtRest(world.Options.Compatibility, this);
+
+                // MBF: inert gravity-affected objects balanced over a ledge can
+                // receive pseudo-torque. comp_falloff selects whether it applies.
+                world.ThingMovement.UpdateBoomLedgeTorqueAtRest(this);
+            }
+
+            // Boom pushers run after normal mobj movement. Constant wind/current
+            // remain player-only. MBF additionally lets point push/pull effects
+            // act on eligible non-player actors. Keep Boom's non-player hot path
+            // free of the per-pusher loop.
+            if (GameCompatibilityFeatures.SupportsBoom(world.Options.Compatibility))
+            {
+                if (player != null)
+                {
+                    BoomSectorWind.Apply(this);
+                    BoomSectorCurrent.Apply(this);
+                    world.Specials.ApplyBoomPointPushers(this);
+                }
+                else if (GameCompatibilityFeatures.SupportsMbf(world.Options.Compatibility) &&
+                         BoomPointPusher.CanAffect(world.Options.Compatibility, this))
+                {
+                    world.Specials.ApplyBoomPointPushers(this);
+                }
             }
 
             // Cycle through states,
@@ -321,18 +369,27 @@ namespace ManagedDoom
 
         private void NightmareRespawn()
         {
-            MapThing sp;
-            if (spawnPoint != null)
+            var sp = spawnPoint ?? MapThing.Empty;
+            var respawnX = sp.X;
+            var respawnY = sp.Y;
+            var respawnAngle = sp.Angle;
+            var spawnlessFixed = MbfRespawnCompatibility.TryResolveSpawnlessRespawn(
+                world.Options.Compatibility,
+                world.Options.MbfOptions.CompRespawn,
+                this,
+                out var fixedX,
+                out var fixedY,
+                out var fixedAngle);
+
+            if (spawnlessFixed)
             {
-                sp = spawnPoint;
-            }
-            else
-            {
-                sp = MapThing.Empty;
+                respawnX = fixedX;
+                respawnY = fixedY;
+                respawnAngle = fixedAngle;
             }
 
             // Somthing is occupying it's position?
-            if (!world.ThingMovement.CheckPosition(this, sp.X, sp.Y))
+            if (!world.ThingMovement.CheckPosition(this, respawnX, respawnY))
             {
                 // No respwan.
                 return;
@@ -350,10 +407,10 @@ namespace ManagedDoom
             world.StartSound(fog1, Sfx.TELEPT, SfxType.Misc);
 
             // Spawn a teleport fog at the new spot.
-            var ss = Geometry.PointInSubsector(sp.X, sp.Y, world.Map);
+            var ss = Geometry.PointInSubsector(respawnX, respawnY, world.Map);
 
             var fog2 = ta.SpawnMobj(
-                sp.X, sp.Y,
+                respawnX, respawnY,
                 ss.Sector.FloorHeight, MobjType.Tfog);
 
             world.StartSound(fog2, Sfx.TELEPT, SfxType.Misc);
@@ -370,11 +427,11 @@ namespace ManagedDoom
             }
 
             // Inherit attributes from deceased one.
-            var mobj = ta.SpawnMobj(sp.X, sp.Y, z, type);
+            var mobj = ta.SpawnMobj(respawnX, respawnY, z, type);
             mobj.SpawnPoint = spawnPoint;
-            mobj.Angle = sp.Angle;
+            mobj.Angle = respawnAngle;
 
-            if ((sp.Flags & ThingFlags.Ambush) != 0)
+            if (!spawnlessFixed && (sp.Flags & ThingFlags.Ambush) != 0)
             {
                 mobj.Flags |= MobjFlags.Ambush;
             }
@@ -502,6 +559,12 @@ namespace ManagedDoom
             set => blockPrev = value;
         }
 
+        internal int BlockMapIndex
+        {
+            get => blockMapIndex;
+            set => blockMapIndex = value;
+        }
+
         public Subsector Subsector
         {
             get => subsector;
@@ -518,6 +581,17 @@ namespace ManagedDoom
         {
             get => ceilingZ;
             set => ceilingZ = value;
+        }
+
+        /// <summary>
+        /// Lowest contacted floor remembered by MBF movement. This is kept
+        /// separately from FloorZ so the monkeys option can compare the
+        /// previous and destination ledge geometry symmetrically.
+        /// </summary>
+        public Fixed DropoffZ
+        {
+            get => dropoffZ;
+            set => dropoffZ = value;
         }
 
         public Fixed Radius
@@ -556,6 +630,38 @@ namespace ManagedDoom
             set => validCount = value;
         }
 
+        public int BoomTorqueGear
+        {
+            get => boomTorqueGear;
+            set => boomTorqueGear = value;
+        }
+
+        public bool BoomLedgeFalling
+        {
+            get => boomLedgeFalling;
+            set => boomLedgeFalling = value;
+        }
+
+        /// <summary>
+        /// Transient MBF21 marker equivalent to MIF_SCROLLING. It is set when
+        /// a Boom scroller/current/wind/pusher contributes XY momentum and is
+        /// cleared immediately after the actor's next XYMovement.
+        /// </summary>
+        public bool MbfScrollingMovement
+        {
+            get => mbfScrollingMovement;
+            set => mbfScrollingMovement = value;
+        }
+
+        /// <summary>
+        /// Internal MBF MIF_ARMED-equivalent used by TOUCHY actor semantics.
+        /// </summary>
+        public bool MbfTouchyArmed
+        {
+            get => mbfTouchyArmed;
+            set => mbfTouchyArmed = value;
+        }
+
         public MobjType Type
         {
             get => type;
@@ -586,6 +692,12 @@ namespace ManagedDoom
             set => flags = value;
         }
 
+        public bool Translucent
+        {
+            get => translucent;
+            set => translucent = value;
+        }
+
         public int Health
         {
             get => health;
@@ -602,6 +714,18 @@ namespace ManagedDoom
         {
             get => moveCount;
             set => moveCount = value;
+        }
+
+        public int StrafeCount
+        {
+            get => strafeCount;
+            set => strafeCount = value;
+        }
+
+        public int PursueCount
+        {
+            get => pursueCount;
+            set => pursueCount = value;
         }
 
         public Mobj Target
@@ -644,6 +768,12 @@ namespace ManagedDoom
         {
             get => tracer;
             set => tracer = value;
+        }
+
+        public Mobj LastEnemy
+        {
+            get => lastEnemy;
+            set => lastEnemy = value;
         }
     }
 }

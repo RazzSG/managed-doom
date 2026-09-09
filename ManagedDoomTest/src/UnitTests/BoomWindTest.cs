@@ -1,7 +1,8 @@
-using System.Linq;
+﻿using System.Linq;
 using ManagedDoom;
 using ManagedDoom.Compatibility;
 using ManagedDoom.Compatibility.Boom.Pushers;
+using ManagedDoom.Compatibility.Boom.Sectors;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace ManagedDoomTest.UnitTests;
@@ -99,6 +100,7 @@ public sealed class BoomWindTest
 
         Assert.AreEqual(512, thing.MomX.Data);
         Assert.AreEqual(-1024, thing.MomY.Data);
+        Assert.IsTrue(thing.MbfScrollingMovement);
     }
 
     [TestMethod]
@@ -120,6 +122,61 @@ public sealed class BoomWindTest
 
         Assert.AreEqual(1536, thing.MomX.Data);
         Assert.AreEqual(-1536, thing.MomY.Data);
+    }
+
+    [TestMethod]
+    public void TouchingWindSectorAffectsAirbornePlayerWhenOriginIsInNeighborSector()
+    {
+        using var content = GameContent.CreateDummy(WadPath.Doom2);
+        var world = new World(content, new GameOptions { Compatibility = GameCompatibility.Boom }, null);
+        var thing = world.ConsolePlayer.Mobj;
+        var origin = thing.Subsector.Sector;
+        var windSector = FindUntouchedSector(world, thing, origin);
+
+        ConfigurePlayerForWind(thing, origin);
+        origin.Special = 0;
+        windSector.Special = (SectorSpecial)BoomPusherTranslator.PushMask;
+        windSector.WindAboveX = new Fixed(1536);
+        windSector.WindAboveY = new Fixed(-1024);
+        thing.Z = thing.FloorZ + Fixed.One;
+        PrependTouchingSector(thing, windSector);
+
+        BoomSectorWind.Apply(thing);
+
+        Assert.AreEqual(1536, thing.MomX.Data);
+        Assert.AreEqual(-1024, thing.MomY.Data);
+    }
+
+    [TestMethod]
+    public void HeightSectorWindMatchesPrBoomWaterSurfaceRules()
+    {
+        using var content = GameContent.CreateDummy(WadPath.Doom2);
+        var world = new World(content, new GameOptions { Compatibility = GameCompatibility.Boom }, null);
+        var thing = world.ConsolePlayer.Mobj;
+        var sector = thing.Subsector.Sector;
+        var control = world.Map.Sectors.First(candidate => !ReferenceEquals(candidate, sector));
+
+        ConfigurePlayerForWind(thing, sector);
+        sector.WindGroundX = new Fixed(512);
+        sector.WindAboveX = new Fixed(1536);
+        control.FloorHeight = Fixed.FromInt(64);
+        sector.HeightSector = control;
+
+        thing.Z = Fixed.FromInt(80);
+        thing.Player.ViewZ = Fixed.FromInt(100);
+        BoomSectorWind.Apply(thing);
+        Assert.AreEqual(1536, thing.MomX.Data);
+
+        thing.MomX = Fixed.Zero;
+        thing.Z = Fixed.FromInt(48);
+        thing.Player.ViewZ = Fixed.FromInt(80);
+        BoomSectorWind.Apply(thing);
+        Assert.AreEqual(512, thing.MomX.Data);
+
+        thing.MomX = Fixed.Zero;
+        thing.Player.ViewZ = Fixed.FromInt(48);
+        BoomSectorWind.Apply(thing);
+        Assert.AreEqual(Fixed.Zero.Data, thing.MomX.Data);
     }
 
     [TestMethod]
@@ -208,6 +265,34 @@ public sealed class BoomWindTest
         thing.MomY = Fixed.Zero;
         thing.FloorZ = sector.FloorHeight;
         sector.Special = (SectorSpecial)BoomPusherTranslator.PushMask;
+    }
+
+    private static Sector FindUntouchedSector(World world, Mobj thing, Sector origin)
+    {
+        return world.Map.Sectors.First(sector =>
+            !ReferenceEquals(sector, origin) &&
+            !TouchesSector(thing, sector));
+    }
+
+    private static bool TouchesSector(Mobj thing, Sector sector)
+    {
+        for (var node = thing.TouchingSectorList; node != null; node = node.ThingNext)
+        {
+            if (ReferenceEquals(node.Sector, sector))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static void PrependTouchingSector(Mobj thing, Sector sector)
+    {
+        thing.TouchingSectorList = new BoomSectorTouchNode
+        {
+            Thing = thing,
+            Sector = sector,
+            ThingNext = thing.TouchingSectorList
+        };
     }
 
     private static LineDef FindUnusedLine(World world)

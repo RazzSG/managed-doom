@@ -26,6 +26,7 @@ namespace ManagedDoom
             public static int InitialHealth { get; set; } = 100;
             public static int InitialBullets { get; set; } = 50;
             public static int MaxHealth { get; set; } = 200;
+            public static bool HasMaxHealthOverride { get; set; } = false;
             public static int MaxArmor { get; set; } = 200;
             public static int GreenArmorClass { get; set; } = 1;
             public static int BlueArmorClass { get; set; } = 2;

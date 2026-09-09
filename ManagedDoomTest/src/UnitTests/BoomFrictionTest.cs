@@ -21,6 +21,67 @@ public sealed class BoomFrictionTest
     }
 
     [TestMethod]
+    public void TranslatorClampsMbfEditFullIceControlLine()
+    {
+        // MBFEDIT!.WAD MAP01 line 370 runs from (-2904,3048) to
+        // (-2512,3056), i.e. delta (392,8). The raw Boom formula exceeds
+        // FRACUNIT and produces a negative move factor unless the canonical
+        // post-calculation clamps are applied.
+        var resolved = BoomFrictionTranslator.Resolve(
+            Fixed.FromInt(392),
+            Fixed.FromInt(8));
+
+        Assert.AreEqual(Fixed.FracUnit, resolved.Friction.Data);
+        Assert.AreEqual(BoomFrictionTranslator.MinimumMoveFactorData, resolved.MoveFactor.Data);
+    }
+
+    [TestMethod]
+    public void TranslatorClampsExtremeSludgeMoveFactor()
+    {
+        var resolved = BoomFrictionTranslator.Resolve(Fixed.Zero, Fixed.Zero);
+
+        Assert.AreEqual(0xd000, resolved.Friction.Data);
+        Assert.AreEqual(BoomFrictionTranslator.MinimumMoveFactorData, resolved.MoveFactor.Data);
+    }
+
+    [TestMethod]
+    public void MbfEditFullIcePlayerInputKeepsPositiveThrust()
+    {
+        using var content = GameContent.CreateDummy(WadPath.Doom2);
+        var world = new World(content, new GameOptions { Compatibility = GameCompatibility.Mbf }, null);
+        var player = world.ConsolePlayer;
+        var thing = player.Mobj;
+        var sector = thing.Subsector.Sector;
+        var resolved = BoomFrictionTranslator.Resolve(
+            Fixed.FromInt(392),
+            Fixed.FromInt(8));
+
+        sector.Special = (SectorSpecial)BoomFrictionTranslator.FrictionMask;
+        sector.Friction = resolved.Friction;
+        sector.MoveFactor = resolved.MoveFactor;
+        thing.Flags &= ~(MobjFlags.NoClip | MobjFlags.NoGravity);
+        thing.Z = thing.FloorZ = sector.FloorHeight;
+        thing.Angle = Angle.Ang0;
+        thing.MomX = Fixed.Zero;
+        thing.MomY = Fixed.Zero;
+        player.Cmd.Clear();
+        player.Cmd.ForwardMove = 10;
+
+        world.PlayerBehavior.MovePlayer(player);
+
+        var expectedMove = resolved.MoveFactor * player.Cmd.ForwardMove;
+        var expectedMomX = expectedMove * Trig.Cos(thing.Angle);
+        var expectedMomY = expectedMove * Trig.Sin(thing.Angle);
+
+        // DOOM's fine-angle cosine table represents cos(0) as 65535/65536,
+        // not an exact FRACUNIT. Therefore a 320-unit fixed thrust becomes
+        // 319 after the same fixed-point multiplication used by Thrust().
+        Assert.AreEqual(expectedMomX.Data, thing.MomX.Data);
+        Assert.AreEqual(expectedMomY.Data, thing.MomY.Data);
+        Assert.IsTrue(thing.MomX > Fixed.Zero);
+    }
+
+    [TestMethod]
     public void InitializeResolvesTaggedSectorOnceAtMapStartup()
     {
         using var content = GameContent.CreateDummy(WadPath.Doom2);

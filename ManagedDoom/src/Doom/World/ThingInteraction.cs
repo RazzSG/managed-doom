@@ -16,7 +16,9 @@
 
 
 using System;
-using ManagedDoom.Compatibility.Boom.Gameplay;
+using ManagedDoom.Compatibility;
+using ManagedDoom.Compatibility.Mbf.AI;
+using ManagedDoom.Compatibility.Mbf.Gameplay;
 
 namespace ManagedDoom
 {
@@ -145,7 +147,21 @@ namespace ManagedDoom
 		/// </summary>
 		public void DamageMobj(Mobj target, Mobj inflictor, Mobj source, int damage)
 		{
-			if ((target.Flags & MobjFlags.Shootable) == 0)
+			// MBF deliberately allows BOUNCES actors to pass through the normal
+			// damage lifecycle even when a DeHackEd Bits override removed SHOOTABLE.
+			// A_Die relies on this for timed bouncers such as the canonical MBF
+			// grenade state: after its state tics expire, A_Die applies exactly the
+			// actor's remaining health as damage and transitions it to DeathState.
+			var canTakeDamage = (target.Flags & MobjFlags.Shootable) != 0;
+
+			if (!canTakeDamage &&
+				GameCompatibilityFeatures.SupportsMbf(world.Options.Compatibility) &&
+				(target.Flags & MobjFlags.Bounces) != 0)
+			{
+				canTakeDamage = true;
+			}
+
+			if (!canTakeDamage)
 			{
 				// Shouldn't happen...
 				return;
@@ -208,13 +224,15 @@ namespace ManagedDoom
 					damage = target.Health - 1;
 				}
 
-				// Boom fixes god mode so that even 1000+ damage cannot bypass it.
-				// Invulnerability keeps the original high-damage threshold.
-				if (BoomGameplayBugFixes.ShouldIgnorePlayerDamage(
+				// Boom/MBF normally make god mode absolute; MBF comp_god restores Doom's
+				// 1000+ damage bypass. Invulnerability keeps the original threshold.
+				if (MbfGodModeCompatibility.ShouldIgnorePlayerDamage(
 					world.Options.Compatibility,
+					world.Options.MbfOptions.CompGod,
 					damage,
 					(player.Cheats & CheatFlags.GodMode) != 0,
-					player.Powers[(int)PowerType.Invulnerability] > 0))
+					MbfPowerupCheatCompatibility.IsActive(
+						player.Powers[(int)PowerType.Invulnerability])))
 				{
 					return;
 				}
@@ -285,8 +303,25 @@ namespace ManagedDoom
 			if ((target.Threshold == 0 || target.Type == MobjType.Vile) &&
 				source != null &&
 				source != target &&
-				source.Type != MobjType.Vile)
+				source.Type != MobjType.Vile &&
+				MbfFriendTargeting.CanAcquireTarget(
+					world.Options.Compatibility,
+					target,
+					source) &&
+				MbfMonsterInfighting.CanRetaliate(
+					world.Options.Compatibility,
+					world.Options.MbfOptions.MonsterInfighting,
+					target,
+					source))
 			{
+				// MBF can resume the previous enemy after this retaliation target
+				// disappears. Pre-MBF compatibility leaves LastEnemy untouched.
+				MbfMonsterTargetMemory.RememberCurrentEnemy(
+					world.Options.Compatibility,
+					world.Options.MbfOptions.MonstersRemember,
+					target,
+					source);
+
 				// If not intent on another player, chase after this one.
 				target.Target = source;
 				target.Threshold = baseThreshold;
@@ -340,7 +375,19 @@ namespace ManagedDoom
 		/// </summary>
 		private bool DoRadiusAttack(Mobj thing)
 		{
-			if ((thing.Flags & MobjFlags.Shootable) == 0)
+			// MBF's PIT_RadiusAttack deliberately includes BOUNCES actors in
+			// addition to normal SHOOTABLE things. This is what lets an exploding
+			// grenade damage another grenade and start the same death sequence.
+			var canTakeRadiusDamage = (thing.Flags & MobjFlags.Shootable) != 0;
+
+			if (!canTakeRadiusDamage &&
+				GameCompatibilityFeatures.SupportsMbf(world.Options.Compatibility) &&
+				(thing.Flags & MobjFlags.Bounces) != 0)
+			{
+				canTakeRadiusDamage = true;
+			}
+
+			if (!canTakeRadiusDamage)
 			{
 				return true;
 			}

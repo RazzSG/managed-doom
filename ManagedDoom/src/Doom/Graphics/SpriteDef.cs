@@ -29,5 +29,17 @@ namespace ManagedDoom
         }
 
         public SpriteFrame[] Frames => frames;
+
+        public bool TryGetFrame(int frameNumber, out SpriteFrame frame)
+        {
+            if ((uint)frameNumber < (uint)frames.Length)
+            {
+                frame = frames[frameNumber];
+                return frame != null;
+            }
+
+            frame = null;
+            return false;
+        }
     }
 }

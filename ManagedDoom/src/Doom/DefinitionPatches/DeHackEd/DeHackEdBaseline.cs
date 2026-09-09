@@ -137,6 +137,8 @@ namespace ManagedDoom.DefinitionPatches.DeHackEd
             private readonly int damage;
             private readonly Sfx activeSound;
             private readonly MobjFlags flags;
+            private readonly bool translucent;
+            private readonly bool hasDeHackEdBitsOverride;
             private readonly MobjState raiseState;
 
             private MobjInfoSnapshot(MobjInfo info)
@@ -163,6 +165,8 @@ namespace ManagedDoom.DefinitionPatches.DeHackEd
                 damage = info.Damage;
                 activeSound = info.ActiveSound;
                 flags = info.Flags;
+                translucent = info.Translucent;
+                hasDeHackEdBitsOverride = info.HasDeHackEdBitsOverride;
                 raiseState = info.Raisestate;
             }
 
@@ -195,6 +199,8 @@ namespace ManagedDoom.DefinitionPatches.DeHackEd
                 info.Damage = damage;
                 info.ActiveSound = activeSound;
                 info.Flags = flags;
+                info.Translucent = translucent;
+                info.HasDeHackEdBitsOverride = hasDeHackEdBitsOverride;
                 info.Raisestate = raiseState;
             }
         }
@@ -283,6 +289,7 @@ namespace ManagedDoom.DefinitionPatches.DeHackEd
             private readonly int initialHealth;
             private readonly int initialBullets;
             private readonly int maxHealth;
+            private readonly bool hasMaxHealthOverride;
             private readonly int maxArmor;
             private readonly int greenArmorClass;
             private readonly int blueArmorClass;
@@ -302,6 +309,7 @@ namespace ManagedDoom.DefinitionPatches.DeHackEd
                 initialHealth = DoomInfo.DeHackEdConst.InitialHealth;
                 initialBullets = DoomInfo.DeHackEdConst.InitialBullets;
                 maxHealth = DoomInfo.DeHackEdConst.MaxHealth;
+                hasMaxHealthOverride = DoomInfo.DeHackEdConst.HasMaxHealthOverride;
                 maxArmor = DoomInfo.DeHackEdConst.MaxArmor;
                 greenArmorClass = DoomInfo.DeHackEdConst.GreenArmorClass;
                 blueArmorClass = DoomInfo.DeHackEdConst.BlueArmorClass;
@@ -327,6 +335,7 @@ namespace ManagedDoom.DefinitionPatches.DeHackEd
                 DoomInfo.DeHackEdConst.InitialHealth = initialHealth;
                 DoomInfo.DeHackEdConst.InitialBullets = initialBullets;
                 DoomInfo.DeHackEdConst.MaxHealth = maxHealth;
+                DoomInfo.DeHackEdConst.HasMaxHealthOverride = hasMaxHealthOverride;
                 DoomInfo.DeHackEdConst.MaxArmor = maxArmor;
                 DoomInfo.DeHackEdConst.GreenArmorClass = greenArmorClass;
                 DoomInfo.DeHackEdConst.BlueArmorClass = blueArmorClass;

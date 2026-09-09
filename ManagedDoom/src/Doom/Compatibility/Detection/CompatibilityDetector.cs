@@ -7,7 +7,10 @@ namespace ManagedDoom.Compatibility.Detection;
 
 public static class CompatibilityDetector
 {
-    public static CompatibilityDetectionResult Detect(Wad wad)
+    public static CompatibilityDetectionResult Detect(Wad wad) =>
+        Detect(wad, null);
+
+    public static CompatibilityDetectionResult Detect(Wad wad, CommandLineArgs args)
     {
         if (wad == null)
             throw new ArgumentNullException(nameof(wad));
@@ -15,7 +18,7 @@ public static class CompatibilityDetector
         if (ComplvlReader.TryRead(wad, out var compatibility))
             return new CompatibilityDetectionResult(compatibility, CompatibilityDetectionSource.Complvl);
 
-        if (CompatibilityFeatureScanner.TryDetect(wad, out compatibility))
+        if (CompatibilityFeatureScanner.TryDetect(wad, args, out compatibility))
             return new CompatibilityDetectionResult(compatibility, CompatibilityDetectionSource.FeatureScan);
 
         return new CompatibilityDetectionResult(GameCompatibility.Vanilla, CompatibilityDetectionSource.Default);

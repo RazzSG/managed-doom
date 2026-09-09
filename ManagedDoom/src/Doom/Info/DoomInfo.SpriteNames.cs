@@ -160,7 +160,13 @@ namespace ManagedDoom
             new DoomString("POB2"),
             new DoomString("BRS1"),
             new DoomString("TLMP"),
-            new DoomString("TLP2")
+            new DoomString("TLP2"),
+            new DoomString("TNT1"),
+            new DoomString("DOGS"),
+            new DoomString("PLS1"),
+            new DoomString("PLS2"),
+            new DoomString("BON3"),
+            new DoomString("BON4")
         };
     }
 }

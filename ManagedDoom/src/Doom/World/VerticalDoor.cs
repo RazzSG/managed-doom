@@ -17,6 +17,7 @@
 
 using System;
 using ManagedDoom.Compatibility.Boom.Doors;
+using ManagedDoom.Compatibility.Mbf.Doors;
 
 namespace ManagedDoom
 {
@@ -133,7 +134,7 @@ namespace ManagedDoom
 								// Unlink and free.
 								world.Thinkers.Remove(this);
 								sector.DisableFrameInterpolationForOneFrame();
-								if (!BoomDoorCompatibility.FixesBlazingDoorSounds(world.Options.Compatibility))
+								if (!UsesFixedBlazingDoorSounds)
 								{
 									world.StartSound(sector.SoundOrigin, Sfx.BDCLS, SfxType.Misc);
 								}
@@ -147,6 +148,13 @@ namespace ManagedDoom
 								// Unlink and free.
 								world.Thinkers.Remove(this);
 								sector.DisableFrameInterpolationForOneFrame();
+								if ((type == VerticalDoorType.GeneralizedRaise ||
+									type == VerticalDoorType.GeneralizedClose) &&
+									speed >= Fixed.FromInt(8) &&
+									!UsesFixedBlazingDoorSounds)
+								{
+									world.StartSound(sector.SoundOrigin, Sfx.BDCLS, SfxType.Misc);
+								}
 								break;
 
 							case VerticalDoorType.Close30ThenOpen:
@@ -178,11 +186,22 @@ namespace ManagedDoom
 								direction = 1;
 								world.StartSound(
 									sector.SoundOrigin,
-									BoomDoorCompatibility.FixesBlazingDoorSounds(world.Options.Compatibility) ? Sfx.BDOPN : Sfx.DOROPN,
+									UsesFixedBlazingDoorSounds ? Sfx.BDOPN : Sfx.DOROPN,
 									SfxType.Misc);
 								break;
 
 							case VerticalDoorType.GeneralizedRaise:
+								direction = 1;
+								if (speed >= Fixed.FromInt(8) && !UsesFixedBlazingDoorSounds)
+								{
+									world.StartSound(sector.SoundOrigin, Sfx.DOROPN, SfxType.Misc);
+								}
+								else
+								{
+									StartGeneralizedOpenSound();
+								}
+								break;
+
 							case VerticalDoorType.GeneralizedCloseThenOpen:
 								direction = 1;
 								StartGeneralizedOpenSound();
@@ -239,6 +258,11 @@ namespace ManagedDoom
 			}
 		}
 
+		private bool UsesFixedBlazingDoorSounds =>
+			MbfBlazingDoorCompatibility.UsesFixedBlazingDoorSounds(
+				world.Options.Compatibility,
+				world.Options.MbfOptions.CompBlazing);
+
 		private bool HasDoorLighting =>
 			lightTag != 0 &&
 			lightLine != null &&
@@ -247,7 +271,9 @@ namespace ManagedDoom
 		private void UpdateGradualDoorLighting(SectorAction sectorAction)
 		{
 			if (!HasDoorLighting ||
-				!BoomDoorCompatibility.UsesGradualDoorLighting(world.Options.Compatibility))
+				!MbfDoorLightingCompatibility.UsesGradualDoorLighting(
+					world.Options.Compatibility,
+					world.Options.MbfOptions.CompDoorLight))
 			{
 				return;
 			}
@@ -261,8 +287,10 @@ namespace ManagedDoom
 		{
 			var compatibility = world.Options.Compatibility;
 			if (!HasDoorLighting ||
-				!BoomDoorCompatibility.UsesTaggedManualDoorLighting(compatibility) ||
-				BoomDoorCompatibility.UsesGradualDoorLighting(compatibility))
+				!MbfDoorLightingCompatibility.UsesTaggedManualDoorLighting(
+					compatibility, world.Options.MbfOptions.CompDoorLight) ||
+				MbfDoorLightingCompatibility.UsesGradualDoorLighting(
+					compatibility, world.Options.MbfOptions.CompDoorLight))
 			{
 				return;
 			}

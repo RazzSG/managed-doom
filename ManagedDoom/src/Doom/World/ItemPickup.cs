@@ -16,6 +16,8 @@
 
 
 using System;
+using ManagedDoom.Compatibility.Mbf.Audio;
+using ManagedDoom.Compatibility.Mbf.Gameplay;
 
 namespace ManagedDoom
 {
@@ -176,7 +178,10 @@ namespace ManagedDoom
 
                 player.PendingWeapon = weapon;
 
-                if (player == world.ConsolePlayer)
+                if (MbfSoundCompatibility.ShouldPlayPickupSound(
+                    world.Options.Compatibility,
+                    world.Options.MbfOptions.CompSound,
+                    player == world.DisplayPlayer))
                 {
                     world.StartSound(player.Mobj, Sfx.WPNUP, SfxType.Misc);
                 }
@@ -226,15 +231,22 @@ namespace ManagedDoom
         /// </returns>
         private bool GiveHealth(Player player, int amount)
         {
-            if (player.Health >= DoomInfo.DeHackEdConst.InitialHealth)
+            var maxHealth = MbfMaxHealthCompatibility.ResolveRegularHealthCap(
+                world.Options.Compatibility,
+                world.Options.MbfOptions.CompMaxHealth,
+                DoomInfo.DeHackEdConst.InitialHealth,
+                DoomInfo.DeHackEdConst.MaxHealth,
+                DoomInfo.DeHackEdConst.HasMaxHealthOverride);
+
+            if (player.Health >= maxHealth)
             {
                 return false;
             }
 
             player.Health += amount;
-            if (player.Health > DoomInfo.DeHackEdConst.InitialHealth)
+            if (player.Health > maxHealth)
             {
-                player.Health = DoomInfo.DeHackEdConst.InitialHealth;
+                player.Health = maxHealth;
             }
 
             player.Mobj.Health = player.Health;
@@ -378,11 +390,17 @@ namespace ManagedDoom
 
                 // Bonus items.
                 case Sprite.BON1:
-                    // Can go over 100%.
+                    // Can go over the normal healing cap.
                     player.Health++;
-                    if (player.Health > DoomInfo.DeHackEdConst.MaxHealth)
+                    var maxHealthBonus = MbfMaxHealthCompatibility.ResolveBonusHealthCap(
+                        world.Options.Compatibility,
+                        world.Options.MbfOptions.CompMaxHealth,
+                        DoomInfo.DeHackEdConst.MaxHealth,
+                        DoomInfo.DeHackEdConst.MaxHealth,
+                        DoomInfo.DeHackEdConst.HasMaxHealthOverride);
+                    if (player.Health > maxHealthBonus)
                     {
-                        player.Health = DoomInfo.DeHackEdConst.MaxHealth;
+                        player.Health = maxHealthBonus;
                     }
                     player.Mobj.Health = player.Health;
                     player.SendMessage(DoomInfo.Strings.GOTHTHBONUS);
@@ -752,7 +770,10 @@ namespace ManagedDoom
 
             player.BonusCount += bonusAdd;
 
-            if (player == world.ConsolePlayer)
+            if (MbfSoundCompatibility.ShouldPlayPickupSound(
+                world.Options.Compatibility,
+                world.Options.MbfOptions.CompSound,
+                player == world.DisplayPlayer))
             {
                 world.StartSound(player.Mobj, sound, SfxType.Misc);
             }

@@ -89,28 +89,7 @@ public sealed class BoomMovementQuirksTest
     }
 
     [TestMethod]
-    public void BoomIceUsesQuarterMaximumBob()
-    {
-        using var content = GameContent.CreateDummy(WadPath.Doom2);
-        var world = new World(content, new GameOptions { Compatibility = GameCompatibility.Boom }, null);
-        var player = world.ConsolePlayer;
-        var thing = player.Mobj;
-        var sector = thing.Subsector.Sector;
-
-        sector.Special = (SectorSpecial)BoomFrictionTranslator.FrictionMask;
-        sector.Friction = new Fixed(0xf000);
-        thing.Flags &= ~(MobjFlags.NoClip | MobjFlags.NoGravity);
-        thing.Z = sector.FloorHeight;
-        thing.MomX = Fixed.FromInt(20);
-        thing.MomY = Fixed.Zero;
-
-        world.PlayerBehavior.CalcHeight(player);
-
-        Assert.AreEqual(0x40000, player.Bob.Data);
-    }
-
-    [TestMethod]
-    public void BoomMudAndVanillaIceKeepNormalMaximumBob()
+    public void BoomIceUsesQuarterMaximumBobWhileMbfUsesNormalMaximum()
     {
         using var content = GameContent.CreateDummy(WadPath.Doom2);
 
@@ -118,28 +97,55 @@ public sealed class BoomMovementQuirksTest
         var boomPlayer = boomWorld.ConsolePlayer;
         var boomThing = boomPlayer.Mobj;
         var boomSector = boomThing.Subsector.Sector;
+
         boomSector.Special = (SectorSpecial)BoomFrictionTranslator.FrictionMask;
-        boomSector.Friction = new Fixed(0xd800);
+        boomSector.Friction = new Fixed(0xf000);
         boomThing.Flags &= ~(MobjFlags.NoClip | MobjFlags.NoGravity);
         boomThing.Z = boomSector.FloorHeight;
         boomThing.MomX = Fixed.FromInt(20);
         boomThing.MomY = Fixed.Zero;
 
         boomWorld.PlayerBehavior.CalcHeight(boomPlayer);
-        Assert.AreEqual(0x100000, boomPlayer.Bob.Data);
 
-        var vanillaWorld = new World(content, new GameOptions { Compatibility = GameCompatibility.Vanilla }, null);
-        var vanillaPlayer = vanillaWorld.ConsolePlayer;
-        var vanillaThing = vanillaPlayer.Mobj;
-        var vanillaSector = vanillaThing.Subsector.Sector;
-        vanillaSector.Special = (SectorSpecial)BoomFrictionTranslator.FrictionMask;
-        vanillaSector.Friction = new Fixed(0xf000);
-        vanillaThing.Flags &= ~(MobjFlags.NoClip | MobjFlags.NoGravity);
-        vanillaThing.Z = vanillaSector.FloorHeight;
-        vanillaThing.MomX = Fixed.FromInt(20);
-        vanillaThing.MomY = Fixed.Zero;
+        Assert.AreEqual(0x100000 >> 2, boomPlayer.Bob.Data);
 
-        vanillaWorld.PlayerBehavior.CalcHeight(vanillaPlayer);
-        Assert.AreEqual(0x100000, vanillaPlayer.Bob.Data);
+        foreach (var compatibility in new[] { GameCompatibility.Mbf, GameCompatibility.Mbf21 })
+        {
+            var world = new World(content, new GameOptions { Compatibility = compatibility }, null);
+            var player = world.ConsolePlayer;
+            var thing = player.Mobj;
+            var sector = thing.Subsector.Sector;
+
+            sector.Special = (SectorSpecial)BoomFrictionTranslator.FrictionMask;
+            sector.Friction = new Fixed(0xf000);
+            thing.Flags &= ~(MobjFlags.NoClip | MobjFlags.NoGravity);
+            thing.Z = sector.FloorHeight;
+            thing.MomX = Fixed.Zero;
+            thing.MomY = Fixed.Zero;
+            player.BobMomX = Fixed.FromInt(20);
+            player.BobMomY = Fixed.Zero;
+
+            world.PlayerBehavior.CalcHeight(player);
+
+            Assert.AreEqual(0x100000, player.Bob.Data, compatibility.ToString());
+        }
+    }
+
+    [TestMethod]
+    public void VanillaStillUsesNormalMaximumBobFromPhysicalMomentum()
+    {
+        using var content = GameContent.CreateDummy(WadPath.Doom2);
+        var world = new World(content, new GameOptions { Compatibility = GameCompatibility.Vanilla }, null);
+        var player = world.ConsolePlayer;
+        var thing = player.Mobj;
+
+        thing.MomX = Fixed.FromInt(20);
+        thing.MomY = Fixed.Zero;
+        player.BobMomX = Fixed.Zero;
+        player.BobMomY = Fixed.Zero;
+
+        world.PlayerBehavior.CalcHeight(player);
+
+        Assert.AreEqual(0x100000, player.Bob.Data);
     }
 }

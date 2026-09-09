@@ -18,6 +18,7 @@
 using System;
 using System.IO;
 using ManagedDoom.Compatibility.Boom.Scrolling;
+using ManagedDoom.Compatibility.Mbf.Rendering;
 
 namespace ManagedDoom
 {
@@ -30,6 +31,16 @@ namespace ManagedDoom
 
         private static readonly int versionSize = 16;
         private static readonly int saveBufferSize = 16 * 1024 * 1024;
+
+        // ManagedDoom keeps the vanilla mobj record size. Offsets 84 and 92
+        // are unused pointer/validcount slots in this serializer, so MBF can
+        // persist DropoffZ without changing the record size or breaking older
+        // readers. Offset 120 stores StrafeCount, offset 24 stores
+        // PursueCount, and offset 28 stores MBF's internal TOUCHY armed marker;
+        // these are pointer slots unused by this serializer. The
+        // marker distinguishes ManagedDoom's MBF extension records from
+        // old/external vanilla save data.
+        private const int mbfDropoffMarker = unchecked((int)0x4D424644); // MBFD
 
         private enum ThinkerClass
         {
@@ -201,6 +212,8 @@ namespace ManagedDoom
                         Write(data, ptr + 12, mobj.X.Data);
                         Write(data, ptr + 16, mobj.Y.Data);
                         Write(data, ptr + 20, mobj.Z.Data);
+                        Write(data, ptr + 24, mobj.PursueCount);
+                        Write(data, ptr + 28, mobj.MbfTouchyArmed ? 1 : 0);
                         Write(data, ptr + 32, mobj.Angle.Data);
                         Write(data, ptr + 36, (int)mobj.Sprite);
                         Write(data, ptr + 40, mobj.Frame);
@@ -211,13 +224,16 @@ namespace ManagedDoom
                         Write(data, ptr + 72, mobj.MomX.Data);
                         Write(data, ptr + 76, mobj.MomY.Data);
                         Write(data, ptr + 80, mobj.MomZ.Data);
+                        Write(data, ptr + 84, mobj.DropoffZ.Data);
                         Write(data, ptr + 88, (int)mobj.Type);
+                        Write(data, ptr + 92, mbfDropoffMarker);
                         Write(data, ptr + 96, mobj.Tics);
                         Write(data, ptr + 100, mobj.State.Number);
                         Write(data, ptr + 104, (int)mobj.Flags);
                         Write(data, ptr + 108, mobj.Health);
                         Write(data, ptr + 112, (int)mobj.MoveDir);
                         Write(data, ptr + 116, mobj.MoveCount);
+                        Write(data, ptr + 120, mobj.StrafeCount);
                         Write(data, ptr + 124, mobj.ReactionTime);
                         Write(data, ptr + 128, mobj.Threshold);
                         if (mobj.Player == null)
@@ -989,11 +1005,20 @@ namespace ManagedDoom
                             mobj.X = new Fixed(BitConverter.ToInt32(data, ptr + 12));
                             mobj.Y = new Fixed(BitConverter.ToInt32(data, ptr + 16));
                             mobj.Z = new Fixed(BitConverter.ToInt32(data, ptr + 20));
+                            mobj.PursueCount = BitConverter.ToInt32(data, ptr + 92) == mbfDropoffMarker
+                                ? BitConverter.ToInt32(data, ptr + 24)
+                                : 0;
+                            mobj.MbfTouchyArmed =
+                                BitConverter.ToInt32(data, ptr + 92) == mbfDropoffMarker &&
+                                BitConverter.ToInt32(data, ptr + 28) != 0;
                             mobj.Angle = new Angle(BitConverter.ToInt32(data, ptr + 32));
                             mobj.Sprite = (Sprite)BitConverter.ToInt32(data, ptr + 36);
                             mobj.Frame = BitConverter.ToInt32(data, ptr + 40);
                             mobj.FloorZ = new Fixed(BitConverter.ToInt32(data, ptr + 56));
                             mobj.CeilingZ = new Fixed(BitConverter.ToInt32(data, ptr + 60));
+                            mobj.DropoffZ = BitConverter.ToInt32(data, ptr + 92) == mbfDropoffMarker
+                                ? new Fixed(BitConverter.ToInt32(data, ptr + 84))
+                                : mobj.FloorZ;
                             mobj.Radius = new Fixed(BitConverter.ToInt32(data, ptr + 64));
                             mobj.Height = new Fixed(BitConverter.ToInt32(data, ptr + 68));
                             mobj.MomX = new Fixed(BitConverter.ToInt32(data, ptr + 72));
@@ -1001,12 +1026,20 @@ namespace ManagedDoom
                             mobj.MomZ = new Fixed(BitConverter.ToInt32(data, ptr + 80));
                             mobj.Type = (MobjType)BitConverter.ToInt32(data, ptr + 88);
                             mobj.Info = DoomInfo.MobjInfos[(int)mobj.Type];
+                            mobj.Translucent = MbfTranslucencyCompatibility.ResolveActorTranslucency(
+                                world.Options.Compatibility,
+                                world.Options.MbfOptions.CompTranslucency,
+                                mobj.Type,
+                                mobj.Info);
                             mobj.Tics = BitConverter.ToInt32(data, ptr + 96);
                             mobj.State = DoomInfo.States[BitConverter.ToInt32(data, ptr + 100)];
                             mobj.Flags = (MobjFlags)BitConverter.ToInt32(data, ptr + 104);
                             mobj.Health = BitConverter.ToInt32(data, ptr + 108);
                             mobj.MoveDir = (Direction)BitConverter.ToInt32(data, ptr + 112);
                             mobj.MoveCount = BitConverter.ToInt32(data, ptr + 116);
+                            mobj.StrafeCount = BitConverter.ToInt32(data, ptr + 92) == mbfDropoffMarker
+                                ? BitConverter.ToInt32(data, ptr + 120)
+                                : 0;
                             mobj.ReactionTime = BitConverter.ToInt32(data, ptr + 124);
                             mobj.Threshold = BitConverter.ToInt32(data, ptr + 128);
                             var playerNumber = BitConverter.ToInt32(data, ptr + 132);

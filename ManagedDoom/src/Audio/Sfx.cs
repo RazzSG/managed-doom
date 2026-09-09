@@ -129,6 +129,11 @@ namespace ManagedDoom
         SKEACT,
         SKESIT,
         SKEATK,
-        RADIO
+        RADIO,
+        DGSIT,
+        DGATK,
+        DGACT,
+        DGDTH,
+        DGPAIN
     }
 }

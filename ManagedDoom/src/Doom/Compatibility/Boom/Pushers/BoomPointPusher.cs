@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using ManagedDoom.Compatibility;
+using ManagedDoom.Compatibility.Boom.Movement;
+using ManagedDoom.Compatibility.Mbf.Movement;
 
 namespace ManagedDoom.Compatibility.Boom.Pushers;
 
@@ -74,10 +76,7 @@ public sealed class BoomPointPusher
 
     public void Apply(Mobj thing)
     {
-        if (thing?.Player == null)
-            return;
-
-        if ((thing.Flags & (MobjFlags.NoClip | MobjFlags.NoGravity)) != 0)
+        if (!CanAffect(world.Options.Compatibility, thing))
             return;
 
         // Boom lets the sector special dynamically turn an already spawned pusher off.
@@ -85,6 +84,7 @@ public sealed class BoomPointPusher
             return;
 
         var speed = BoomPusherTranslator.ResolvePointSpeed(
+            world.Options.Compatibility,
             magnitude,
             thing.X - sourceX,
             thing.Y - sourceY);
@@ -107,8 +107,33 @@ public sealed class BoomPointPusher
         if (pushesAway)
             angle += Angle.Ang180;
 
-        thing.MomX += speed * Trig.Cos(angle);
-        thing.MomY += speed * Trig.Sin(angle);
+        var deltaX = speed * Trig.Cos(angle);
+        var deltaY = speed * Trig.Sin(angle);
+        thing.MomX += deltaX;
+        thing.MomY += deltaY;
+        MbfLedgeBlockCompatibility.MarkScrollingMovement(thing, deltaX, deltaY);
+    }
+
+    public static bool CanAffect(GameCompatibility compatibility, Mobj thing)
+    {
+        if (thing == null)
+            return false;
+
+        if (!GameCompatibilityFeatures.SupportsMbf(compatibility))
+        {
+            // Boom's original point-pusher behavior is player-only and ignores
+            // clipped or no-gravity players.
+            return thing.Player != null &&
+                   (thing.Flags & (MobjFlags.NoClip | MobjFlags.NoGravity)) == 0;
+        }
+
+        // MBF generalized PIT_PushThing: living/sentient actors and any
+        // shootable actor are eligible, and only NOCLIP suppresses the force.
+        // In particular, NOGRAVITY monsters (for example flying monsters) are
+        // intentionally affected in MBF.
+        return (thing.Flags & MobjFlags.NoClip) == 0 &&
+               (BoomLedgeTorque.IsSentient(thing) ||
+                (thing.Flags & MobjFlags.Shootable) != 0);
     }
 
     private static Dictionary<int, PointSource> ResolveSources(World world)

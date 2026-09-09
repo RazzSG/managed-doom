@@ -21,6 +21,7 @@ using ManagedDoom.Video;
 using ManagedDoom.Audio;
 using ManagedDoom.UserInput;
 using ManagedDoom.Compatibility.Detection;
+using ManagedDoom.Compatibility.Mbf;
 
 namespace ManagedDoom
 {
@@ -47,6 +48,8 @@ namespace ManagedDoom
         private bool fastMonsters;
         private bool respawnMonsters;
         private bool noMonsters;
+
+        private MbfOptions mbfOptions;
 
         private IntermissionInfo intermissionInfo;
 
@@ -86,6 +89,8 @@ namespace ManagedDoom
             respawnMonsters = false;
             noMonsters = false;
 
+            mbfOptions = new MbfOptions();
+
             intermissionInfo = new IntermissionInfo();
 
             random = new DoomRandom();
@@ -110,7 +115,12 @@ namespace ManagedDoom
             var mode = args.compatibility.Present
                 ? args.compatibility.Value
                 : GameCompatibilityMode.Auto;
-            SetCompatibility(content.Wad, mode);
+            SetCompatibility(content.Wad, mode, args);
+
+            if (GameCompatibilityFeatures.SupportsMbf(compatibility))
+            {
+                mbfOptions = content.MbfOptions.Clone();
+            }
         }
 
         public GameVersion GameVersion
@@ -153,9 +163,15 @@ namespace ManagedDoom
 
         public CompatibilityDetectionSource CompatibilitySource => compatibilitySource;
 
-        public CompatibilityDetectionResult SetCompatibility(Wad wad, GameCompatibilityMode mode)
+        public CompatibilityDetectionResult SetCompatibility(Wad wad, GameCompatibilityMode mode) =>
+            SetCompatibility(wad, mode, null);
+
+        public CompatibilityDetectionResult SetCompatibility(
+            Wad wad,
+            GameCompatibilityMode mode,
+            CommandLineArgs args)
         {
-            var result = CompatibilityResolver.Resolve(wad, mode);
+            var result = CompatibilityResolver.Resolve(wad, mode, args);
 
             compatibility = result.Compatibility;
             compatibilityMode = mode;
@@ -228,6 +244,8 @@ namespace ManagedDoom
             get => noMonsters;
             set => noMonsters = value;
         }
+
+        public MbfOptions MbfOptions => mbfOptions;
 
         public IntermissionInfo IntermissionInfo
         {

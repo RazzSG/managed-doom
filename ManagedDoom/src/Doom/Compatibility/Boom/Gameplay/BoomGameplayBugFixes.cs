@@ -41,9 +41,18 @@ public static class BoomGameplayBugFixes
         Mobj corpse,
         GameCompatibility compatibility)
     {
+        return PrepareArchVileCorpseForFitCheck(
+            corpse,
+            UsesFixedArchVileResurrection(compatibility));
+    }
+
+    internal static ArchVileCorpseFitState PrepareArchVileCorpseForFitCheck(
+        Mobj corpse,
+        bool useFixedResurrection)
+    {
         var state = new ArchVileCorpseFitState(corpse.Height, corpse.Radius);
 
-        if (UsesFixedArchVileResurrection(compatibility))
+        if (useFixedResurrection)
         {
             corpse.Height = corpse.Info.Height;
             corpse.Radius = corpse.Info.Radius;
@@ -62,7 +71,18 @@ public static class BoomGameplayBugFixes
         ArchVileCorpseFitState state,
         GameCompatibility compatibility)
     {
-        if (UsesFixedArchVileResurrection(compatibility))
+        RestoreArchVileCorpseAfterFitCheck(
+            corpse,
+            state,
+            UsesFixedArchVileResurrection(compatibility));
+    }
+
+    internal static void RestoreArchVileCorpseAfterFitCheck(
+        Mobj corpse,
+        ArchVileCorpseFitState state,
+        bool useFixedResurrection)
+    {
+        if (useFixedResurrection)
         {
             corpse.Height = state.Height;
             corpse.Radius = state.Radius;
@@ -78,7 +98,16 @@ public static class BoomGameplayBugFixes
         Mobj corpse,
         GameCompatibility compatibility)
     {
-        if (UsesFixedArchVileResurrection(compatibility))
+        ApplyArchVileResurrectionDimensions(
+            corpse,
+            UsesFixedArchVileResurrection(compatibility));
+    }
+
+    internal static void ApplyArchVileResurrectionDimensions(
+        Mobj corpse,
+        bool useFixedResurrection)
+    {
+        if (useFixedResurrection)
         {
             corpse.Height = corpse.Info.Height;
             corpse.Radius = corpse.Info.Radius;

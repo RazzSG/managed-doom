@@ -171,8 +171,14 @@ namespace ManagedDoom.Video
             DrawPatch("BOSSBACK", 0, 0);
 
             var frame = finale.CastState.Frame & 0x7fff;
-            var patch = sprites[finale.CastState.Sprite].Frames[frame].Patches[0];
-            if (sprites[finale.CastState.Sprite].Frames[frame].Flip[0])
+            var spriteDef = sprites[finale.CastState.Sprite];
+            if (spriteDef == null || !spriteDef.TryGetFrame(frame, out var spriteFrame))
+            {
+                return;
+            }
+
+            var patch = spriteFrame.Patches[0];
+            if (spriteFrame.Flip[0])
             {
                 screen.DrawPatchFlip(
                     patch,

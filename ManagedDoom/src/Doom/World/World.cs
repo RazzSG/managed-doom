@@ -74,7 +74,7 @@ namespace ManagedDoom
 
             thinkers = new Thinkers(this);
             specials = new Specials(this, resorces.BoomTranslucencyMaps, resorces.BoomSwitches);
-            thingAllocation = new ThingAllocation(this);
+            thingAllocation = new ThingAllocation(this, resorces.Sprites);
             thingMovement = new ThingMovement(this);
             thingInteraction = new ThingInteraction(this);
             mapCollision = new MapCollision(this);
@@ -110,6 +110,8 @@ namespace ManagedDoom
             totalSecrets = 0;
 
             LoadThings();
+            thingAllocation.PrepareMbfPlayerHelpers();
+            thingAllocation.SpawnMbfPlayerHelpers();
 
             // If deathmatch, randomly spawn the active players.
             if (options.Deathmatch != 0)

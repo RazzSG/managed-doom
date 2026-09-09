@@ -24,6 +24,7 @@ using ManagedDoom.Compatibility.Boom.Pushers;
 using ManagedDoom.Compatibility.Boom.Rendering;
 using ManagedDoom.Compatibility.Boom.Scrolling;
 using ManagedDoom.Compatibility.Boom.Sectors;
+using ManagedDoom.Compatibility.Mbf.Rendering;
 
 namespace ManagedDoom
 {
@@ -199,6 +200,7 @@ namespace ManagedDoom
             // mode so a repeated SpawnSpecials() also clears stale Boom references
             // when compatibility is switched back to Vanilla.
             BoomTransferHeightResolver.Apply(world);
+            MbfSkyTransferResolver.Apply(world);
             BoomTranslucentLineResolver.Apply(world, boomTranslucencyMaps);
 
             if (supportsBoom)

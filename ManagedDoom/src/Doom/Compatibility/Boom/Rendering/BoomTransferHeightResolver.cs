@@ -217,6 +217,43 @@ public static class BoomTransferHeightResolver
             control.FloorFlat == skyFlatNumber);
     }
 
+    /// <summary>
+    /// Resolves the vertical texture-mid value for a two-sided middle texture.
+    /// Transfer heights change the portal planes that are drawn, but they do not
+    /// change the original sector heights used by Boom for middle-texture pegging.
+    /// Using fake 242 heights here can shift a masked texture by an entire sector
+    /// height (MBFEDIT MAP01 lines 640/641 are a concrete example).
+    /// </summary>
+    public static Fixed ResolveMaskedMiddleTextureAlt(
+        LineFlags flags,
+        Fixed realFrontFloor,
+        Fixed realFrontCeiling,
+        Fixed realBackFloor,
+        Fixed realBackCeiling,
+        int textureHeight,
+        Fixed rowOffset,
+        Fixed viewZ)
+    {
+        Fixed textureTop;
+
+        if ((flags & LineFlags.DontPegBottom) != 0)
+        {
+            var highestRealFloor = realFrontFloor > realBackFloor
+                ? realFrontFloor
+                : realBackFloor;
+            textureTop = highestRealFloor + Fixed.FromInt(textureHeight);
+        }
+        else
+        {
+            textureTop = realFrontCeiling < realBackCeiling
+                ? realFrontCeiling
+                : realBackCeiling;
+        }
+
+        return textureTop - viewZ + rowOffset;
+    }
+
+
     public static BoomTransferHeightRenderState ResolveNormalSector(Sector sector, Fixed frameFrac)
     {
         return new BoomTransferHeightRenderState(

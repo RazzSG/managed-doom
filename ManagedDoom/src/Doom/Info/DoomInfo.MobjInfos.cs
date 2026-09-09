@@ -3583,6 +3583,191 @@ namespace ManagedDoom
                 Sfx.NONE, // activeSound
                 MobjFlags.NoBlockMap, // flags
                 MobjState.Null // raiseState
+            ),
+
+            new MobjInfo( // MobjType.MbfPushSource
+                5001, // doomEdNum
+                MobjState.Null, // spawnState (handled directly by Boom/MBF pusher compatibility)
+                1000, // spawnHealth
+                MobjState.Null, // seeState
+                Sfx.NONE, // seeSound
+                8, // reactionTime
+                Sfx.NONE, // attackSound
+                MobjState.Null, // painState
+                0, // painChance
+                Sfx.NONE, // painSound
+                MobjState.Null, // meleeState
+                MobjState.Null, // missileState
+                MobjState.Null, // deathState
+                MobjState.Null, // xdeathState
+                Sfx.NONE, // deathSound
+                0, // speed
+                Fixed.Zero, // radius
+                Fixed.Zero, // height
+                100, // mass
+                0, // damage
+                Sfx.NONE, // activeSound
+                MobjFlags.NoSector | MobjFlags.NoBlockMap | MobjFlags.NoGravity, // flags
+                MobjState.Null // raiseState
+            ),
+
+            new MobjInfo( // MobjType.MbfPullSource
+                5002, // doomEdNum
+                MobjState.Null, // spawnState (handled directly by Boom/MBF pusher compatibility)
+                1000, // spawnHealth
+                MobjState.Null, // seeState
+                Sfx.NONE, // seeSound
+                8, // reactionTime
+                Sfx.NONE, // attackSound
+                MobjState.Null, // painState
+                0, // painChance
+                Sfx.NONE, // painSound
+                MobjState.Null, // meleeState
+                MobjState.Null, // missileState
+                MobjState.Null, // deathState
+                MobjState.Null, // xdeathState
+                Sfx.NONE, // deathSound
+                0, // speed
+                Fixed.Zero, // radius
+                Fixed.Zero, // height
+                100, // mass
+                0, // damage
+                Sfx.NONE, // activeSound
+                MobjFlags.NoSector | MobjFlags.NoBlockMap | MobjFlags.NoGravity, // flags
+                MobjState.Null // raiseState
+            ),
+
+            new MobjInfo( // MobjType.Dog
+                888, // doomEdNum
+                MobjState.DogsStnd, // spawnState
+                500, // spawnHealth
+                MobjState.DogsRun1, // seeState
+                Sfx.NONE, // seeSound (MBF dog sound resource support is added separately)
+                8, // reactionTime
+                Sfx.NONE, // attackSound
+                MobjState.DogsPain, // painState
+                180, // painChance
+                Sfx.NONE, // painSound
+                MobjState.DogsAtk1, // meleeState
+                MobjState.Null, // missileState
+                MobjState.DogsDie1, // deathState
+                MobjState.Null, // xdeathState
+                Sfx.NONE, // deathSound
+                10, // speed
+                Fixed.FromInt(12), // radius
+                Fixed.FromInt(28), // height
+                100, // mass
+                0, // damage
+                Sfx.NONE, // activeSound
+                MobjFlags.Solid | MobjFlags.Shootable | MobjFlags.CountKill, // flags
+                MobjState.DogsRaise1 // raiseState
+            ),
+
+            // Classic MBF exposes four beta Thing slots after the helper dog.
+            // Their presence and numbering are part of the DeHackEd namespace;
+            // complevel-11 patches are allowed to repurpose them freely.
+            new MobjInfo( // MobjType.MbfBetaPlasma1 (DeHackEd Thing 141)
+                -1, // doomEdNum
+                MobjState.MbfBetaState999, // spawnState
+                1000, // spawnHealth
+                MobjState.Null, // seeState
+                Sfx.NONE, // seeSound
+                8, // reactionTime
+                Sfx.NONE, // attackSound
+                MobjState.Null, // painState
+                0, // painChance
+                Sfx.NONE, // painSound
+                MobjState.Null, // meleeState
+                MobjState.Null, // missileState
+                MobjState.Null, // deathState
+                MobjState.Null, // xdeathState
+                Sfx.NONE, // deathSound
+                0, // speed
+                Fixed.FromInt(13), // radius
+                Fixed.FromInt(8), // height
+                100, // mass
+                0, // damage
+                Sfx.NONE, // activeSound
+                MobjFlags.NoBlockMap | MobjFlags.NoGravity, // flags
+                MobjState.Null // raiseState
+            ),
+
+            new MobjInfo( // MobjType.MbfBetaPlasma2 (DeHackEd Thing 142)
+                -1, // doomEdNum
+                MobjState.MbfBetaState1000, // spawnState
+                1000, // spawnHealth
+                MobjState.Null, // seeState
+                Sfx.NONE, // seeSound
+                8, // reactionTime
+                Sfx.NONE, // attackSound
+                MobjState.Null, // painState
+                0, // painChance
+                Sfx.NONE, // painSound
+                MobjState.Null, // meleeState
+                MobjState.Null, // missileState
+                MobjState.Null, // deathState
+                MobjState.Null, // xdeathState
+                Sfx.NONE, // deathSound
+                0, // speed
+                Fixed.FromInt(13), // radius
+                Fixed.FromInt(8), // height
+                100, // mass
+                0, // damage
+                Sfx.NONE, // activeSound
+                MobjFlags.NoBlockMap | MobjFlags.NoGravity, // flags
+                MobjState.Null // raiseState
+            ),
+
+            new MobjInfo( // MobjType.MbfBetaSceptre (DeHackEd Thing 143)
+                2016, // doomEdNum
+                MobjState.MbfBetaSceptre, // spawnState
+                1000, // spawnHealth
+                MobjState.Null, // seeState
+                Sfx.NONE, // seeSound
+                8, // reactionTime
+                Sfx.NONE, // attackSound
+                MobjState.Null, // painState
+                0, // painChance
+                Sfx.NONE, // painSound
+                MobjState.Null, // meleeState
+                MobjState.Null, // missileState
+                MobjState.Null, // deathState
+                MobjState.Null, // xdeathState
+                Sfx.NONE, // deathSound
+                0, // speed
+                Fixed.FromInt(20), // radius
+                Fixed.FromInt(16), // height
+                100, // mass
+                0, // damage
+                Sfx.NONE, // activeSound
+                MobjFlags.Special | MobjFlags.CountItem, // flags
+                MobjState.Null // raiseState
+            ),
+
+            new MobjInfo( // MobjType.MbfBetaBible (DeHackEd Thing 144)
+                2017, // doomEdNum
+                MobjState.MbfBetaBible, // spawnState
+                1000, // spawnHealth
+                MobjState.Null, // seeState
+                Sfx.NONE, // seeSound
+                8, // reactionTime
+                Sfx.NONE, // attackSound
+                MobjState.Null, // painState
+                0, // painChance
+                Sfx.NONE, // painSound
+                MobjState.Null, // meleeState
+                MobjState.Null, // missileState
+                MobjState.Null, // deathState
+                MobjState.Null, // xdeathState
+                Sfx.NONE, // deathSound
+                0, // speed
+                Fixed.FromInt(20), // radius
+                Fixed.FromInt(16), // height
+                100, // mass
+                0, // damage
+                Sfx.NONE, // activeSound
+                MobjFlags.Special | MobjFlags.CountItem, // flags
+                MobjState.Null // raiseState
             )
 
         };

@@ -16,6 +16,7 @@
 
 
 using System;
+using ManagedDoom.Compatibility.Mbf.Things;
 
 namespace ManagedDoom
 {
@@ -282,6 +283,79 @@ namespace ManagedDoom
             {
                 world.MonsterBehavior.BrainExplode(actor);
             }
+
+            public void Spawn(World world, Mobj actor)
+            {
+                MbfFriendlySpawnCompatibility.SpawnFromState(world, actor);
+            }
+
+            public void Turn(World world, Mobj actor)
+            {
+                MbfStateControlCodePointers.TurnFromState(world, actor);
+            }
+
+            public void Face(World world, Mobj actor)
+            {
+                MbfStateControlCodePointers.FaceFromState(world, actor);
+            }
+
+            public void RandomJump(World world, Mobj actor)
+            {
+                MbfStateControlCodePointers.RandomJumpFromState(world, actor);
+            }
+
+            public void Die(World world, Mobj actor)
+            {
+                MbfActorUtilityCodePointers.Die(world, actor);
+            }
+
+            public void Detonate(World world, Mobj actor)
+            {
+                MbfActorUtilityCodePointers.Detonate(world, actor);
+            }
+
+            public void Stop(World world, Mobj actor)
+            {
+                MbfActorUtilityCodePointers.Stop(world, actor);
+            }
+
+            public void PlaySound(World world, Mobj actor)
+            {
+                MbfLineAndSoundCodePointers.PlaySoundFromState(world, actor);
+            }
+
+            public void LineEffect(World world, Mobj actor)
+            {
+                MbfLineAndSoundCodePointers.LineEffectFromState(world, actor);
+            }
+
+            public void Scratch(World world, Mobj actor)
+            {
+                MbfMeleeCodePointers.ScratchFromState(world, actor);
+            }
+
+            public void BetaSkullAttack(World world, Mobj actor)
+            {
+                MbfMeleeCodePointers.BetaSkullAttack(world, actor);
+            }
+
+            public void Mushroom(World world, Mobj actor)
+            {
+                MbfMushroomCodePointer.Execute(world, actor);
+            }
         }
+
+        internal static Action<World, Mobj> MbfSpawnAction => ma.Spawn;
+        internal static Action<World, Mobj> MbfTurnAction => ma.Turn;
+        internal static Action<World, Mobj> MbfFaceAction => ma.Face;
+        internal static Action<World, Mobj> MbfRandomJumpAction => ma.RandomJump;
+        internal static Action<World, Mobj> MbfDieAction => ma.Die;
+        internal static Action<World, Mobj> MbfDetonateAction => ma.Detonate;
+        internal static Action<World, Mobj> MbfStopAction => ma.Stop;
+        internal static Action<World, Mobj> MbfPlaySoundAction => ma.PlaySound;
+        internal static Action<World, Mobj> MbfLineEffectAction => ma.LineEffect;
+        internal static Action<World, Mobj> MbfScratchAction => ma.Scratch;
+        internal static Action<World, Mobj> MbfBetaSkullAttackAction => ma.BetaSkullAttack;
+        internal static Action<World, Mobj> MbfMushroomAction => ma.Mushroom;
     }
 }

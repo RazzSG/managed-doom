@@ -53,6 +53,53 @@ public sealed class BoomTransferHeightTest
     }
 
     [TestMethod]
+    public void MbfEditTransferHeightFenceKeepsRealFloorPegging()
+    {
+        // MBFEDIT MAP01: target sector 133 is physically closed at z=128,
+        // but linedef 242 makes it render as 0..128. Its MIDBARS3 sides use
+        // lower-unpegged plus row offset -128. Pegging to fake floor 0 shifts
+        // the whole texture below the visible floor; Boom pegs to real floor 128.
+        var textureAlt = BoomTransferHeightResolver.ResolveMaskedMiddleTextureAlt(
+            LineFlags.TwoSided | LineFlags.DontPegBottom,
+            Fixed.FromInt(128),
+            Fixed.FromInt(128),
+            Fixed.Zero,
+            Fixed.FromInt(128),
+            textureHeight: 128,
+            rowOffset: Fixed.FromInt(-128),
+            viewZ: Fixed.FromInt(41));
+
+        Assert.AreEqual(Fixed.FromInt(128 - 41).Data, textureAlt.Data);
+    }
+
+    [TestMethod]
+    public void NonTransferredMaskedMiddleTextureKeepsExistingPeggingMath()
+    {
+        var lowerUnpegged = BoomTransferHeightResolver.ResolveMaskedMiddleTextureAlt(
+            LineFlags.TwoSided | LineFlags.DontPegBottom,
+            Fixed.FromInt(0),
+            Fixed.FromInt(128),
+            Fixed.FromInt(32),
+            Fixed.FromInt(128),
+            textureHeight: 64,
+            rowOffset: Fixed.FromInt(8),
+            viewZ: Fixed.FromInt(41));
+
+        var upperPegged = BoomTransferHeightResolver.ResolveMaskedMiddleTextureAlt(
+            LineFlags.TwoSided,
+            Fixed.FromInt(0),
+            Fixed.FromInt(128),
+            Fixed.FromInt(32),
+            Fixed.FromInt(96),
+            textureHeight: 64,
+            rowOffset: Fixed.FromInt(8),
+            viewZ: Fixed.FromInt(41));
+
+        Assert.AreEqual(Fixed.FromInt(32 + 64 + 8 - 41).Data, lowerUnpegged.Data);
+        Assert.AreEqual(Fixed.FromInt(96 + 8 - 41).Data, upperPegged.Data);
+    }
+
+    [TestMethod]
     public void NormalZoneUsesControlHeightsAndTargetAppearance()
     {
         var (target, control, viewSector) = CreateTransferSetup();

@@ -16,6 +16,7 @@
 
 
 using System;
+using ManagedDoom.Compatibility.Mbf.Rendering;
 
 namespace ManagedDoom
 {
@@ -23,8 +24,11 @@ namespace ManagedDoom
 	{
 		private World world;
 
-		// Used for appopriately pained face.
+		// Previous-tic health used by Doom's OUCH-face logic.
 		private int oldHealth;
+
+		// Cached health used only by CalcPainOffset().
+		private int painHealth;
 
 		// Used for evil grin.
 		private bool[] oldWeaponsOwned;
@@ -50,6 +54,7 @@ namespace ManagedDoom
 			this.world = world;
 
 			oldHealth = -1;
+			painHealth = -1;
 			oldWeaponsOwned = new bool[DoomInfo.WeaponInfos.Length];
 			Array.Copy(
 				world.ConsolePlayer.WeaponOwned,
@@ -68,6 +73,7 @@ namespace ManagedDoom
 		public void Reset()
 		{
 			oldHealth = -1;
+			painHealth = -1;
 			Array.Copy(
 				world.ConsolePlayer.WeaponOwned,
 				oldWeaponsOwned,
@@ -84,6 +90,7 @@ namespace ManagedDoom
 		{
 			randomNumber = random.Next();
 			UpdateFace();
+			oldHealth = world.ConsolePlayer.Health;
 		}
 
 		private void UpdateFace()
@@ -136,8 +143,18 @@ namespace ManagedDoom
 					// Being attacked.
 					priority = 7;
 
-					if (player.Health - oldHealth > Face.MuchPain)
+					if (MbfOuchFaceCompatibility.ShouldShowOuchFace(
+						world.Options.Compatibility,
+						world.Options.MbfOptions.CompOuchFace,
+						player.Health,
+						oldHealth,
+						Face.MuchPain))
 					{
+						priority = MbfOuchFaceCompatibility.ResolveMonsterDamagePriority(
+							world.Options.Compatibility,
+							world.Options.MbfOptions.CompOuchFace,
+							legacyPriority: 7,
+							fixedPriority: 8);
 						faceCount = Face.TurnDuration;
 						faceIndex = CalcPainOffset() + Face.OuchOffset;
 					}
@@ -189,7 +206,12 @@ namespace ManagedDoom
 				// Getting hurt because of your own damn stupidity.
 				if (player.DamageCount != 0)
 				{
-					if (player.Health - oldHealth > Face.MuchPain)
+					if (MbfOuchFaceCompatibility.ShouldShowOuchFace(
+						world.Options.Compatibility,
+						world.Options.MbfOptions.CompOuchFace,
+						player.Health,
+						oldHealth,
+						Face.MuchPain))
 					{
 						priority = 7;
 						faceCount = Face.TurnDuration;
@@ -257,11 +279,11 @@ namespace ManagedDoom
 
 			var health = player.Health > 100 ? 100 : player.Health;
 
-			if (health != oldHealth)
+			if (health != painHealth)
 			{
 				lastPainOffset = Face.Stride *
 					(((100 - health) * Face.PainFaceCount) / 101);
-				oldHealth = health;
+				painHealth = health;
 			}
 
 			return lastPainOffset;

@@ -20,16 +20,21 @@ using System.Collections.Generic;
 using ManagedDoom.Compatibility;
 using ManagedDoom.Compatibility.Boom;
 using ManagedDoom.Compatibility.Boom.Pushers;
+using ManagedDoom.Compatibility.Mbf.AI;
+using ManagedDoom.Compatibility.Mbf.Rendering;
+using ManagedDoom.Compatibility.Mbf.Things;
 
 namespace ManagedDoom
 {
     public sealed class ThingAllocation
     {
         private World world;
+        private ISpriteLookup sprites;
 
-        public ThingAllocation(World world)
+        public ThingAllocation(World world, ISpriteLookup sprites)
         {
             this.world = world;
+            this.sprites = sprites;
 
             InitSpawnMapThing();
             InitMultiPlayerRespawn();
@@ -43,12 +48,18 @@ namespace ManagedDoom
         ////////////////////////////////////////////////////////////
 
         private MapThing[] playerStarts;
+        private MapThing[] mbfPlayerHelperCandidateStarts;
         private List<MapThing> deathmatchStarts;
+        private IReadOnlyList<MapThing> mbfPlayerHelperStarts;
+        private IReadOnlyList<Mobj> mbfPlayerHelperActors;
 
         private void InitSpawnMapThing()
         {
             playerStarts = new MapThing[Player.MaxPlayerCount];
+            mbfPlayerHelperCandidateStarts = new MapThing[Player.MaxPlayerCount];
             deathmatchStarts = new List<MapThing>();
+            mbfPlayerHelperStarts = Array.Empty<MapThing>();
+            mbfPlayerHelperActors = Array.Empty<Mobj>();
         }
 
         /// <summary>
@@ -79,6 +90,12 @@ namespace ManagedDoom
                     return;
                 }
 
+                // Helper dogs in original MBF use the first occurrence of
+                // player starts 2-4. Keep that separately so vanilla/network
+                // respawn behavior can continue using the normal last start.
+                if (playerNumber >= 1 && mbfPlayerHelperCandidateStarts[playerNumber] == null)
+                    mbfPlayerHelperCandidateStarts[playerNumber] = mt;
+
                 // Save spots for respawning in network games.
                 playerStarts[playerNumber] = mt;
 
@@ -105,8 +122,26 @@ namespace ManagedDoom
                 return;
             }
 
-            // Apply vanilla and Boom game-mode spawn flags before the skill filter.
-            if (!BoomThingSpawnFilter.IsAllowed(world.Options, mt.Flags))
+            // MBF's dog is a real actor (DoomEdNum 888), but its graphics were
+            // bundled with the original MBF executable rather than Doom IWADs.
+            // Never create an unrenderable DOGS actor from a resource set that
+            // does not supply the complete A-N frame range.
+            if (mt.Type == MbfDogActor.DoomEdNum)
+            {
+                if (!GameCompatibilityFeatures.SupportsMbfDogActor(world.Options.Compatibility) ||
+                    !MbfDogActor.HasRenderableSprites(sprites))
+                {
+                    return;
+                }
+            }
+
+            // Resolve MBF's reserved/friendly map-thing bits before applying the
+            // shared Doom/Boom game-mode and skill filters.
+            var mapThingFlags = MbfThingSpawnCompatibility.ResolveMapFlags(
+                world.Options.Compatibility,
+                mt.Flags);
+
+            if (!BoomThingSpawnFilter.IsAllowed(world.Options, mapThingFlags))
             {
                 return;
             }
@@ -125,7 +160,7 @@ namespace ManagedDoom
                 bit = 1 << ((int)world.Options.Skill - 1);
             }
 
-            if (((int)mt.Flags & bit) == 0)
+            if (((int)mapThingFlags & bit) == 0)
             {
                 return;
             }
@@ -182,7 +217,26 @@ namespace ManagedDoom
                 mobj.Tics = 1 + (world.Random.Next() % mobj.Tics);
             }
 
-            if ((mobj.Flags & MobjFlags.CountKill) != 0)
+            mobj.Angle = mt.Angle;
+
+            if ((mapThingFlags & ThingFlags.Ambush) != 0)
+            {
+                mobj.Flags |= MobjFlags.Ambush;
+            }
+
+            if (MbfThingSpawnCompatibility.HasFriendlyFlag(
+                    world.Options.Compatibility,
+                    mapThingFlags))
+            {
+                mobj.Flags |= MobjFlags.Friend;
+            }
+
+            // MBF deliberately excludes friendly monsters from the level kill
+            // total. Apply the friend bit before counting so ordinary friendly
+            // map things and direct dog things follow the same rule.
+            if ((mobj.Flags & MobjFlags.CountKill) != 0 &&
+                (!GameCompatibilityFeatures.SupportsMbfFriendAi(world.Options.Compatibility) ||
+                 (mobj.Flags & MobjFlags.Friend) == 0))
             {
                 world.TotalKills++;
             }
@@ -190,13 +244,6 @@ namespace ManagedDoom
             if ((mobj.Flags & MobjFlags.CountItem) != 0)
             {
                 world.TotalItems++;
-            }
-
-            mobj.Angle = mt.Angle;
-
-            if ((mt.Flags & ThingFlags.Ambush) != 0)
-            {
-                mobj.Flags |= MobjFlags.Ambush;
             }
         }
 
@@ -227,6 +274,11 @@ namespace ManagedDoom
             var z = Mobj.OnFloorZ;
             var mobj = SpawnMobj(x, y, z, MobjType.Player);
 
+            if (GameCompatibilityFeatures.SupportsMbfFriendAi(world.Options.Compatibility))
+            {
+                mobj.Flags |= MobjFlags.Friend;
+            }
+
             if (mt.Type - 1 == world.Options.ConsolePlayer)
             {
                 world.StatusBar.Reset();
@@ -253,6 +305,8 @@ namespace ManagedDoom
             player.ExtraLight = 0;
             player.FixedColorMap = 0;
             player.ViewHeight = Player.NormalViewHeight;
+            player.BobMomX = Fixed.Zero;
+            player.BobMomY = Fixed.Zero;
 
             // Setup gun psprite.
             world.PlayerBehavior.SetupPlayerSprites(player);
@@ -267,8 +321,52 @@ namespace ManagedDoom
             }
         }
 
+
+        public void PrepareMbfPlayerHelpers()
+        {
+            mbfPlayerHelperStarts = MbfPlayerHelpers.CollectSpawnStarts(
+                world.Options.Compatibility,
+                world.Options.MbfOptions,
+                world.Options.Players,
+                mbfPlayerHelperCandidateStarts,
+                world.Options.NetGame,
+                world.Options.Deathmatch);
+        }
+
+        public void SpawnMbfPlayerHelpers()
+        {
+            if (mbfPlayerHelperStarts.Count == 0 ||
+                !GameCompatibilityFeatures.SupportsMbfDogActor(world.Options.Compatibility) ||
+                !MbfDogActor.HasRenderableSprites(sprites))
+            {
+                mbfPlayerHelperActors = Array.Empty<Mobj>();
+                return;
+            }
+
+            var actors = new List<Mobj>(mbfPlayerHelperStarts.Count);
+
+            foreach (var start in mbfPlayerHelperStarts)
+            {
+                var dog = SpawnMobj(start.X, start.Y, Mobj.OnFloorZ, MobjType.Dog);
+                dog.SpawnPoint = start;
+                dog.Angle = start.Angle;
+                dog.Flags |= MobjFlags.Friend;
+
+                if (dog.Tics > 0)
+                    dog.Tics = 1 + (world.Random.Next() % dog.Tics);
+
+                // Helper dogs are friends, so MBF does not include them in
+                // TotalKills even though the dog actor carries CountKill.
+                actors.Add(dog);
+            }
+
+            mbfPlayerHelperActors = actors;
+        }
+
         public IReadOnlyList<MapThing> PlayerStarts => playerStarts;
         public IReadOnlyList<MapThing> DeathmatchStarts => deathmatchStarts;
+        public IReadOnlyList<MapThing> MbfPlayerHelperStarts => mbfPlayerHelperStarts;
+        public IReadOnlyList<Mobj> MbfPlayerHelperActors => mbfPlayerHelperActors;
 
 
 
@@ -292,6 +390,11 @@ namespace ManagedDoom
             mobj.Radius = info.Radius;
             mobj.Height = info.Height;
             mobj.Flags = info.Flags;
+            mobj.Translucent = MbfTranslucencyCompatibility.ResolveActorTranslucency(
+                world.Options.Compatibility,
+                world.Options.MbfOptions.CompTranslucency,
+                type,
+                info);
             mobj.Health = info.SpawnHealth;
 
             if (world.Options.Skill != GameSkill.Nightmare)
@@ -314,6 +417,7 @@ namespace ManagedDoom
             world.ThingMovement.SetThingPosition(mobj);
 
             mobj.FloorZ = mobj.Subsector.Sector.FloorHeight;
+            mobj.DropoffZ = mobj.FloorZ;
             mobj.CeilingZ = mobj.Subsector.Sector.CeilingHeight;
 
             if (z == Mobj.OnFloorZ)
@@ -407,6 +511,16 @@ namespace ManagedDoom
             missile.X += (missile.MomX >> 1);
             missile.Y += (missile.MomY >> 1);
             missile.Z += (missile.MomZ >> 1);
+
+            // MBF deliberately skips the initial P_TryMove for non-MISSILE
+            // projectile actors (for example DeHackEd grenades using BOUNCES).
+            // Their half-step spawn advance is kept, and normal XY movement on
+            // the following tic resolves wall contact through the MBF bounce path.
+            if (GameCompatibilityFeatures.SupportsMbf(world.Options.Compatibility) &&
+                (missile.Flags & MobjFlags.Missile) == 0)
+            {
+                return;
+            }
 
             if (!world.ThingMovement.TryMove(missile, missile.X, missile.Y))
             {

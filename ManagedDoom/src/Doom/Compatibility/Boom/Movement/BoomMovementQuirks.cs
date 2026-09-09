@@ -39,18 +39,20 @@ public static class BoomMovementQuirks
 
         return sectorFriction;
     }
-
     public static Fixed GetPlayerBobLimit(
         Mobj thing,
         Fixed normalLimit,
         GameCompatibility compatibility)
     {
-        if (!GameCompatibilityFeatures.SupportsBoom(compatibility))
+        if (compatibility != GameCompatibility.Boom)
             return normalLimit;
 
-        // Boom 2.02 reduces the maximum view/weapon bob while standing on ice.
+        // Boom 2.02 derives bobbing from physical player momentum and caps it
+        // to one quarter of MAXBOB on ice. MBF switches to independent
+        // player-applied bob momentum and uses the normal limit.
         return BoomSectorFriction.GetFriction(thing) > BoomFrictionTranslator.OriginalFriction
             ? normalLimit >> 2
             : normalLimit;
     }
+
 }

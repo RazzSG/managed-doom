@@ -1,6 +1,6 @@
 # ManagedDoom Compatibility Roadmap
 
-> Internal development note for adding Boom, full DeHackEd/BEX support, MBF, MBF21 and DSDHacked support to ManagedDoom.
+> Internal development note for adding Boom, full DeHackEd/BEX support, MBF, MBF21, an optional OpenGL renderer backend, and DSDHacked support to ManagedDoom.
 >
 > This plan assumes that compatibility support is being designed from scratch. The main goals are:
 >
@@ -1474,6 +1474,53 @@ Do not create a separate MBF21 engine.
 
 ---
 
+## 35A. OpenGL renderer after MBF21
+
+After MBF21 gameplay and definition-patch support are stable, add an **optional OpenGL renderer backend** before moving on to DSDHacked.
+
+OpenGL is **not** a gameplay compatibility level and must never be added to `GameCompatibility`.
+
+The intended architecture is:
+
+```text
+World / BSP / gameplay / compatibility
+                │
+                ▼
+       renderer-independent scene data
+           /                 \
+          /                   \
+Software renderer         OpenGL renderer
+(reference/fallback)      (GPU backend)
+```
+
+Hard requirements:
+
+```text
+Software rendering remains available.
+OpenGL must not change deterministic gameplay state.
+Boom / MBF / MBF21 behavior must be identical regardless of renderer.
+Renderer selection happens outside gameplay compatibility detection.
+Do not put OpenGL-specific state into World simulation code.
+```
+
+The OpenGL backend should initially reuse Doom's existing BSP traversal and visibility model rather than replacing the engine with a new scene graph.
+
+Preferred progression:
+
+```text
+visible BSP segs        → GPU wall geometry
+visible subsectors      → triangulated floor/ceiling geometry
+visible mobjs           → camera-facing sprite quads
+masked middle textures  → alpha-tested/translucent geometry
+sky surfaces            → dedicated sky path
+```
+
+The first target is rendering parity, not visual enhancement. Keep classic texture coordinates, pegging rules, palette/colormap lighting semantics, interpolation and compatibility-specific rendering behavior correct before adding optional filtering or other presentation features.
+
+OpenGL is expected to address GPU-suitable bottlenecks and software-rasterizer-only artifacts such as column/span coverage seams, but it must **not** be used to hide incorrect BSP, map geometry or gameplay logic.
+
+---
+
 ## 36. DeHackEd/BEX is not optional infrastructure
 
 ManagedDoom already contains partial DeHackEd support, but it must be treated as **unverified and incomplete** until audited against reference behavior.
@@ -1720,9 +1767,9 @@ The parser should therefore be extensible by feature set instead of becoming one
 
 ---
 
-## 39. DSDHacked after MBF21
+## 39. DSDHacked after MBF21 and the OpenGL milestone
 
-DSDHacked is implemented only after MBF21 gameplay and MBF21 DeHackEd support are stable.
+DSDHacked is implemented after MBF21 gameplay/DeHackEd support are stable and after the planned OpenGL renderer milestone has reached its renderer-parity sign-off.
 
 It is an extension of the same DeHackEd pipeline, not a separate compatibility level.
 
@@ -1999,18 +2046,33 @@ Only after full classic DeHackEd/BEX support:
 
 This is where deferred WADs such as large Boom projects with embedded `DEHACKED` return to the corpus.
 
-## Phase 19 — MBF
+## Phase 19 — MBF — COMPLETE
 
 ```text
-110. MBF gameplay compatibility layer
-111. MBF AI / actor behavior
-112. MBF linedef/sector additions
-113. MBF-specific DeHackEd fields and code pointers
-114. MBF behavioral tests and real-WAD corpus
-115. Vanilla + Boom regression
+✔ 110. MBF gameplay compatibility layer
+✔ 111. MBF AI / actor behavior
+✔ 112. MBF linedef/sector additions
+✔ 113. MBF-specific DeHackEd fields and code pointers
+✔ 114. MBF behavioral tests and real-WAD corpus
+✔ 115. Vanilla + Boom regression
 ```
 
 MBF inherits the complete Boom + DeHackEd/BEX implementation.
+
+Final Phase 19 validation:
+
+```text
+✔ full automated test suite passes
+✔ representative MBFEDIT!.WAD corpus loads successfully
+✔ embedded MBF DeHackEd patch loads without invalid Codep Frame warnings
+✔ MBFEDIT!.WAD MAP01 builds successfully (1/1 maps OK)
+✔ AUTO compatibility resolves MBFEDIT!.WAD to Mbf via FeatureScan
+✔ forced Vanilla/Boom profiles remain isolated from MBF runtime semantics
+✔ Vanilla/Boom WAD loading remains regression-clean
+✔ no observed FPS regression from the MBF compatibility layer
+```
+
+Phase 19 is signed off. The next active compatibility milestone is **Phase 20 — MBF21**.
 
 ## Phase 20 — MBF21
 
@@ -2025,32 +2087,55 @@ MBF inherits the complete Boom + DeHackEd/BEX implementation.
 123. Vanilla + Boom + MBF regression
 ```
 
-## Phase 21 — DSDHacked
+## Phase 21 — OpenGL renderer
+
+OpenGL is a rendering backend, **not** a new compatibility level. The software renderer remains available as the reference/fallback path throughout this phase.
 
 ```text
-124. dynamic Thing / State / Sprite / Sound definition tables
-125. Doom version = 2021 detection
-126. allocate and initialize high/new indices with DSDHacked defaults
-127. numeric [SPRITES] entries
-128. numeric [SOUNDS] entries
-129. high-index cross-reference validation
-130. MBF21 Args/code-pointer integration with dynamic states/things
-131. sequential reload/reset isolation
-132. high-index stress tests
-133. real DSDHacked WAD corpus
+124. renderer backend abstraction and runtime renderer selection
+125. OpenGL context, frame lifecycle and resize/fullscreen integration
+126. GPU texture/flat/sprite upload and cache lifecycle
+127. one-sided and two-sided wall geometry with Doom texture offsets/pegging
+128. subsector floor/ceiling polygon generation and triangulation
+129. sprites, masked middle textures and sky rendering
+130. palette/colormap lighting and true-color parity
+131. Boom rendering features: translucency, transfer heights and related clipping semantics
+132. interpolated camera/world rendering parity with the software backend
+133. nearest/bilinear texture filtering as renderer options
+134. batching, state sorting, culling and GPU performance profiling
+135. software ↔ OpenGL visual/behavioral parity tests and representative WAD corpus
+136. OpenGL renderer sign-off with Vanilla/Boom/MBF/MBF21 regression
 ```
 
-## Phase 22 — Full-stack verification
+OpenGL Phase 21 sign-off requires that switching renderers does not alter gameplay state, demo-relevant simulation behavior, compatibility detection or DeHackEd/MBF21 definitions.
+
+## Phase 22 — DSDHacked
 
 ```text
-134. Vanilla regression
-135. Boom regression
-136. classic DeHackEd/BEX regression
-137. MBF regression
-138. MBF21 regression
-139. DSDHacked regression
-140. performance profiling
-141. mixed real-WAD corpus
+137. dynamic Thing / State / Sprite / Sound definition tables
+138. Doom version = 2021 detection
+139. allocate and initialize high/new indices with DSDHacked defaults
+140. numeric [SPRITES] entries
+141. numeric [SOUNDS] entries
+142. high-index cross-reference validation
+143. MBF21 Args/code-pointer integration with dynamic states/things
+144. sequential reload/reset isolation
+145. high-index stress tests
+146. real DSDHacked WAD corpus
+```
+
+## Phase 23 — Full-stack verification
+
+```text
+147. Vanilla regression
+148. Boom regression
+149. classic DeHackEd/BEX regression
+150. MBF regression
+151. MBF21 regression
+152. software/OpenGL renderer regression
+153. DSDHacked regression
+154. performance profiling
+155. mixed real-WAD corpus
 ```
 
 ---
@@ -2118,6 +2203,53 @@ DeHackEd support is complete only when:
 
 ---
 
+# Definition of Done — MBF
+
+MBF support is complete when the MBF-specific layer works on top of the already-stable Boom + DeHackEd/BEX foundation without leaking behavior into older compatibility profiles:
+
+```text
+✔ MBF compatibility inherits Boom behavior rather than duplicating it
+✔ MBF compatibility options are parsed and consumed by runtime behavior
+✔ MBF AI / actor behavior is covered by focused behavioral tests
+✔ FRIEND, TOUCHY and BOUNCES use canonical MBF flag semantics
+✔ helper-dog / friendly-monster behavior is implemented and regression-tested
+✔ implemented MBF code pointers execute through the shared DeHackEd/BEX pipeline
+✔ classic MBF Codep Frame source indices resolve to the correct implemented actions
+✔ external -deh / .bex and embedded DEHACKED participate consistently in AUTO detection
+✔ -nodeh behavior matches the real patch-loading path
+✔ MBF runtime features remain disabled under forced Vanilla/Boom compatibility
+✔ representative end-to-end MBF behavioral integration tests pass
+✔ representative real MBF WAD corpus passes (MBFEDIT!.WAD)
+✔ Vanilla + Boom regression suite remains green
+✔ no observed FPS regression is introduced by MBF support
+```
+
+---
+
+# Definition of Done — OpenGL renderer
+
+The OpenGL backend is complete only when:
+
+```text
+✔ software renderer remains selectable and functional
+✔ renderer choice does not change World/gameplay simulation
+✔ one-sided and two-sided walls match Doom texture placement/pegging rules
+✔ floors and ceilings render without software-column/span coverage seams
+✔ sprites and masked middle textures clip correctly against world geometry
+✔ sky rendering matches expected Doom/Boom behavior
+✔ palette/colormap lighting has a compatibility-correct GPU path
+✔ true-color rendering works without requiring CPU per-pixel rasterization
+✔ Boom translucency and transfer-height rendering are supported
+✔ interpolation produces stable geometry without changing tic simulation
+✔ nearest and bilinear filtering are selectable renderer options
+✔ representative Vanilla/Boom/MBF/MBF21 WADs pass visual parity checks
+✔ OpenGL materially reduces rendering cost in GPU-suitable heavy scenes
+✔ renderer resources are rebuilt safely across WAD reloads/resolution changes
+✔ no renderer-specific state leaks between sequential game loads
+```
+
+---
+
 # Definition of Done — DSDHacked
 
 DSDHacked support is complete only when:
@@ -2157,6 +2289,9 @@ TEST REAL BEHAVIOR AND IMPORTANT CONTRACTS.
 
 KEEP LIMIT-REMOVING ENGINE FEATURES SEPARATE
 FROM GAMEPLAY COMPATIBILITY.
+
+KEEP RENDERER BACKENDS SEPARATE FROM GAMEPLAY COMPATIBILITY.
+SOFTWARE AND OPENGL MUST RENDER THE SAME SIMULATION STATE.
 
 VANILLA → BOOM → MBF → MBF21.
 

@@ -31,6 +31,18 @@ public static class BoomSectorFriction
 
     public static Fixed GetFriction(Mobj thing)
     {
+        if (thing?.Player == null)
+            return BoomFrictionTranslator.OriginalFriction;
+
+        return GetFloorFriction(thing);
+    }
+
+    /// <summary>
+    /// Returns resolved Boom floor friction for any grounded mobj. Compatibility
+    /// policy (player-only in Boom, monsters too in MBF) is decided by callers.
+    /// </summary>
+    public static Fixed GetFloorFriction(Mobj thing)
+    {
         if (!TryGetSectorFriction(thing, out var sector))
             return BoomFrictionTranslator.OriginalFriction;
 
@@ -39,6 +51,9 @@ public static class BoomSectorFriction
 
     public static Fixed GetMoveFactor(Mobj thing)
     {
+        if (thing?.Player == null)
+            return BoomFrictionTranslator.OriginalMoveFactor;
+
         if (!TryGetSectorFriction(thing, out var sector))
             return BoomFrictionTranslator.OriginalMoveFactor;
 
@@ -67,7 +82,7 @@ public static class BoomSectorFriction
     {
         sector = null;
 
-        if (thing?.Player == null || thing.Subsector == null)
+        if (thing == null || thing.Subsector == null)
             return false;
 
         if ((thing.Flags & (MobjFlags.NoClip | MobjFlags.NoGravity)) != 0)

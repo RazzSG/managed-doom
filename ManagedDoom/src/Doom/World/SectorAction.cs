@@ -22,6 +22,9 @@ using ManagedDoom.Compatibility.Boom.Doors;
 using ManagedDoom.Compatibility.Boom.Lines;
 using ManagedDoom.Compatibility.Boom.Movement;
 using ManagedDoom.Compatibility.Boom.Sectors;
+using ManagedDoom.Compatibility.Mbf.Doors;
+using ManagedDoom.Compatibility.Mbf.Movement;
+using ManagedDoom.Compatibility.Mbf.Sectors;
 
 namespace ManagedDoom
 {
@@ -91,12 +94,22 @@ namespace ManagedDoom
 			// What about stranding a monster partially off an edge?
 
 			thing.FloorZ = tm.CurrentFloorZ;
+			thing.DropoffZ = tm.CurrentDropoffZ;
 			thing.CeilingZ = tm.CurrentCeilingZ;
 
 			if (onFloor)
 			{
 				// Walking monsters rise and fall with the floor.
 				thing.Z = thing.FloorZ;
+
+				// MBF P_ThingHeightClip: a moving floor can upset the balance of an
+				// object already being torqued off a ledge. Once the torque gearbox
+				// reached MAXGEAR, restart it at full strength on the new support.
+				// Without this, corpses can stall on the first moving stair.
+				if (thing.BoomLedgeFalling && thing.BoomTorqueGear >= BoomLedgeTorque.MaxGear)
+				{
+					thing.BoomTorqueGear = 0;
+				}
 			}
 			else
 			{
@@ -236,8 +249,9 @@ namespace ManagedDoom
 								var lastPos = sector.FloorHeight;
 								sector.FloorHeight -= speed;
 								if (ChangeSector(sector, crush) &&
-									BoomSectorMovementQuirks.ShouldRestoreIntermediateLoweringFloorAfterNoFit(
-										world.Options.Compatibility))
+									MbfFloorCompatibility.ShouldRestoreIntermediateLoweringFloorAfterNoFit(
+										world.Options.Compatibility,
+										world.Options.MbfOptions.CompFloors))
 								{
 									sector.FloorHeight = lastPos;
 									ChangeSector(sector, crush);
@@ -251,10 +265,13 @@ namespace ManagedDoom
 						case 1:
 							// Up. Boom keeps a rising floor from passing through the
 							// current ceiling; vanilla Doom keeps the original behavior.
-							var floorDestination = GameCompatibilityFeatures.SupportsBoom(world.Options.Compatibility) &&
+							var floorDestination =
+								MbfFloorCompatibility.ShouldClampRaisingFloorDestinationToCeiling(
+									world.Options.Compatibility,
+									world.Options.MbfOptions.CompFloors) &&
 								dest > sector.CeilingHeight
-								? sector.CeilingHeight
-								: dest;
+									? sector.CeilingHeight
+									: dest;
 
 							if (sector.FloorHeight + speed > floorDestination)
 							{
@@ -275,8 +292,9 @@ namespace ManagedDoom
 								sector.FloorHeight += speed;
 								if (ChangeSector(sector, crush))
 								{
-									if (!BoomSectorMovementQuirks.ShouldRestoreIntermediateRaisingFloorAfterNoFit(
+									if (!MbfFloorCompatibility.ShouldRestoreIntermediateRaisingFloorAfterNoFit(
 										world.Options.Compatibility,
+										world.Options.MbfOptions.CompFloors,
 										crush))
 									{
 										return SectorActionResult.Crushed;
@@ -300,10 +318,13 @@ namespace ManagedDoom
 						case -1:
 							// Down. Boom keeps a lowering ceiling from passing through the
 							// current floor; vanilla Doom keeps the original behavior.
-							var ceilingDestination = GameCompatibilityFeatures.SupportsBoom(world.Options.Compatibility) &&
+							var ceilingDestination =
+								MbfFloorCompatibility.ShouldClampLoweringCeilingDestinationToFloor(
+									world.Options.Compatibility,
+									world.Options.MbfOptions.CompFloors) &&
 								dest < sector.FloorHeight
-								? sector.FloorHeight
-								: dest;
+									? sector.FloorHeight
+									: dest;
 
 							if (sector.CeilingHeight - speed < ceilingDestination)
 							{
@@ -368,8 +389,8 @@ namespace ManagedDoom
 
 		private Sector GetNextSector(LineDef line, Sector sector)
 		{
-			return BoomSectorModelCompatibility.GetNextSector(
-				line, sector, world.Options.Compatibility);
+			return MbfSectorModelCompatibility.GetNextSector(
+				line, sector, world.Options.Compatibility, world.Options.MbfOptions.CompModel);
 		}
 
 		private Fixed FindLowestFloorSurrounding(Sector sector)
@@ -397,7 +418,7 @@ namespace ManagedDoom
 
 		private Fixed FindHighestFloorSurrounding(Sector sector)
 		{
-			var floor = BoomSectorModelCompatibility.HighestFloorInitial(world.Options.Compatibility);
+			var floor = MbfSectorModelCompatibility.HighestFloorInitial(world.Options.Compatibility, world.Options.MbfOptions.CompModel);
 
 			for (var i = 0; i < sector.Lines.Length; i++)
 			{
@@ -420,7 +441,7 @@ namespace ManagedDoom
 
 		private Fixed FindLowestCeilingSurrounding(Sector sector)
 		{
-			var height = BoomSectorModelCompatibility.LowestCeilingInitial(world.Options.Compatibility);
+			var height = MbfSectorModelCompatibility.LowestCeilingInitial(world.Options.Compatibility, world.Options.MbfOptions.CompModel);
 
 			for (var i = 0; i < sector.Lines.Length; i++)
 			{
@@ -443,7 +464,7 @@ namespace ManagedDoom
 
 		private Fixed FindHighestCeilingSurrounding(Sector sector)
 		{
-			var height = BoomSectorModelCompatibility.HighestCeilingInitial(world.Options.Compatibility);
+			var height = MbfSectorModelCompatibility.HighestCeilingInitial(world.Options.Compatibility, world.Options.MbfOptions.CompModel);
 
 			for (var i = 0; i < sector.Lines.Length; i++)
 			{
@@ -609,7 +630,9 @@ namespace ManagedDoom
 			newDoor.Speed = doorSpeed;
 			newDoor.TopWait = doorWait;
 			newDoor.LightLine = line;
-			newDoor.LightTag = BoomDoorCompatibility.UsesTaggedManualDoorLighting(world.Options.Compatibility)
+			newDoor.LightTag = MbfDoorLightingCompatibility.UsesTaggedManualDoorLighting(
+				world.Options.Compatibility,
+				world.Options.MbfOptions.CompDoorLight)
 				? line.Tag
 				: 0;
 
@@ -693,8 +716,11 @@ namespace ManagedDoom
 				Speed = doorSpeed * (1 << (int)specification.Speed),
 				TopWait = specification.WaitTics,
 				LightLine = line,
-				LightTag = BoomDoorCompatibility.GetGeneralizedDoorLightTag(
-					world.Options.Compatibility, specification.Trigger, line.Tag)
+				LightTag = MbfDoorLightingCompatibility.GetGeneralizedDoorLightTag(
+					world.Options.Compatibility,
+					world.Options.MbfOptions.CompDoorLight,
+					specification.Trigger,
+					line.Tag)
 			};
 
 			switch (specification.Kind)
@@ -1533,14 +1559,14 @@ namespace ManagedDoom
 			for (var i = 0; i < sector.Lines.Length; i++)
 			{
 				var line = sector.Lines[i];
-				if (!BoomSectorModelCompatibility.IsTwoSided(line, world.Options.Compatibility))
+				if (!MbfSectorModelCompatibility.IsTwoSided(line, world.Options.Compatibility, world.Options.MbfOptions.CompModel))
 					continue;
 
-				if (BoomSectorModelCompatibility.IsUsableShortestTexture(line.FrontSide.BottomTexture, world.Options.Compatibility))
+				if (MbfSectorModelCompatibility.IsUsableShortestTexture(line.FrontSide.BottomTexture, world.Options.Compatibility, world.Options.MbfOptions.CompModel))
 					shortest = Math.Min(shortest, textures[line.FrontSide.BottomTexture].Height);
 
 				if (line.BackSide != null &&
-					BoomSectorModelCompatibility.IsUsableShortestTexture(line.BackSide.BottomTexture, world.Options.Compatibility))
+					MbfSectorModelCompatibility.IsUsableShortestTexture(line.BackSide.BottomTexture, world.Options.Compatibility, world.Options.MbfOptions.CompModel))
 					shortest = Math.Min(shortest, textures[line.BackSide.BottomTexture].Height);
 			}
 
@@ -1673,7 +1699,7 @@ namespace ManagedDoom
 						break;
 
 					case FloorMoveType.RaiseToTexture:
-						var min = BoomSectorModelCompatibility.ShortestTextureInitial(world.Options.Compatibility);
+						var min = MbfSectorModelCompatibility.ShortestTextureInitial(world.Options.Compatibility, world.Options.MbfOptions.CompModel);
 						floor.Direction = 1;
 						floor.Sector = sector;
 						floor.Speed = floorSpeed;
@@ -1681,11 +1707,11 @@ namespace ManagedDoom
 						for (var i = 0; i < sector.Lines.Length; i++)
 						{
 							var modelLine = sector.Lines[i];
-							if (!BoomSectorModelCompatibility.IsTwoSided(modelLine, world.Options.Compatibility))
+							if (!MbfSectorModelCompatibility.IsTwoSided(modelLine, world.Options.Compatibility, world.Options.MbfOptions.CompModel))
 								continue;
 
 							var frontSide = modelLine.FrontSide;
-							if (BoomSectorModelCompatibility.IsUsableShortestTexture(frontSide.BottomTexture, world.Options.Compatibility) &&
+							if (MbfSectorModelCompatibility.IsUsableShortestTexture(frontSide.BottomTexture, world.Options.Compatibility, world.Options.MbfOptions.CompModel) &&
 								textures[frontSide.BottomTexture].Height < min)
 							{
 								min = textures[frontSide.BottomTexture].Height;
@@ -1693,14 +1719,14 @@ namespace ManagedDoom
 
 							var backSide = modelLine.BackSide;
 							if (backSide != null &&
-								BoomSectorModelCompatibility.IsUsableShortestTexture(backSide.BottomTexture, world.Options.Compatibility) &&
+								MbfSectorModelCompatibility.IsUsableShortestTexture(backSide.BottomTexture, world.Options.Compatibility, world.Options.MbfOptions.CompModel) &&
 								textures[backSide.BottomTexture].Height < min)
 							{
 								min = textures[backSide.BottomTexture].Height;
 							}
 						}
-						floor.FloorDestHeight = BoomSectorModelCompatibility.AddShortestTextureHeight(
-							floor.Sector.FloorHeight, min, world.Options.Compatibility);
+						floor.FloorDestHeight = MbfSectorModelCompatibility.AddShortestTextureHeight(
+							floor.Sector.FloorHeight, min, world.Options.Compatibility, world.Options.MbfOptions.CompModel);
 						break;
 
 					case FloorMoveType.LowerAndChange:
@@ -1845,8 +1871,14 @@ namespace ManagedDoom
 			var sectors = world.Map.Sectors;
 			var taggedSectorNumber = -1;
 			var result = false;
-			var fixedTaggedScan = BoomClassicMoverCompatibility.UsesFixedMultiTaggedStairScan(
-				world.Options.Compatibility);
+			var compStairs = world.Options.MbfOptions.CompStairs;
+			var fixedTaggedScan = MbfStairCompatibility.UsesFixedMultiTaggedStairScan(
+				world.Options.Compatibility,
+				compStairs);
+			var advanceHeightBeforeBusyCheck =
+				MbfStairCompatibility.AdvancesHeightBeforeBusyCandidateCheck(
+					world.Options.Compatibility,
+					compStairs);
 
 			while ((taggedSectorNumber = FindSectorFromLineTag(line, taggedSectorNumber)) >= 0)
 			{
@@ -1921,12 +1953,19 @@ namespace ManagedDoom
 							continue;
 						}
 
-						height += stairSize;
+						// Doom advances the stair height before checking whether this
+						// candidate is already moving. Boom fixes that ordering so a
+						// rejected candidate does not consume a step of height.
+						if (advanceHeightBeforeBusyCheck)
+							height += stairSize;
 
 						if (IsFloorBusy(target))
 						{
 							continue;
 						}
+
+						if (!advanceHeightBeforeBusyCheck)
+							height += stairSize;
 
 						sector = target;
 						sectorNumber = newSectorNumber;
@@ -2112,14 +2151,14 @@ namespace ManagedDoom
 			for (var i = 0; i < sector.Lines.Length; i++)
 			{
 				var line = sector.Lines[i];
-				if (!BoomSectorModelCompatibility.IsTwoSided(line, world.Options.Compatibility))
+				if (!MbfSectorModelCompatibility.IsTwoSided(line, world.Options.Compatibility, world.Options.MbfOptions.CompModel))
 					continue;
 
-				if (BoomSectorModelCompatibility.IsUsableShortestTexture(line.FrontSide.TopTexture, world.Options.Compatibility))
+				if (MbfSectorModelCompatibility.IsUsableShortestTexture(line.FrontSide.TopTexture, world.Options.Compatibility, world.Options.MbfOptions.CompModel))
 					shortest = Math.Min(shortest, textures[line.FrontSide.TopTexture].Height);
 
 				if (line.BackSide != null &&
-					BoomSectorModelCompatibility.IsUsableShortestTexture(line.BackSide.TopTexture, world.Options.Compatibility))
+					MbfSectorModelCompatibility.IsUsableShortestTexture(line.BackSide.TopTexture, world.Options.Compatibility, world.Options.MbfOptions.CompModel))
 					shortest = Math.Min(shortest, textures[line.BackSide.TopTexture].Height);
 			}
 
@@ -2502,6 +2541,15 @@ namespace ManagedDoom
 					thing.Angle = dest.Angle;
 					thing.MomX = thing.MomY = thing.MomZ = Fixed.Zero;
 
+					// MBF keeps player-applied bobbing momentum separate from physical
+					// mobj momentum. A normal teleport kills both; otherwise the
+					// reaction-time freeze can leave the view/weapon visibly running
+					// in place even though the player is stationary.
+					if (viewPlayer != null)
+					{
+						MbfPlayerBobbing.Stop(viewPlayer, world.Options.Compatibility);
+					}
+
 					thing.DisableFrameInterpolationForOneFrame();
 					viewPlayer?.DisableFrameInterpolationForOneFrame();
 
@@ -2877,8 +2925,6 @@ namespace ManagedDoom
 					continue;
 				}
 
-				result = true;
-
 				var s2 = GetNextSector(s1.Lines[0], s1);
 
 				//
@@ -2890,6 +2936,17 @@ namespace ManagedDoom
 					break;
 				}
 
+				// Boom refuses to start the donut if the surrounding pool already
+				// has a floor thinker. Doom does not; MBF comp_floors selects
+				// between those two behaviors.
+				if (MbfFloorCompatibility.BlocksDonutWhenPoolFloorIsBusy(
+						world.Options.Compatibility,
+						world.Options.MbfOptions.CompFloors) &&
+					IsFloorBusy(s2))
+				{
+					continue;
+				}
+
 				for (var i = 0; i < s2.Lines.Length; i++)
 				{
 					var s3 = s2.Lines[i].BackSector;
@@ -2898,6 +2955,11 @@ namespace ManagedDoom
 					{
 						continue;
 					}
+
+					// PrBoom marks the action successful as soon as it finds an eligible
+					// pool boundary, before resolving the model sector. Keep that return
+					// timing for compatibility with malformed/undefined donut geometry.
+					result = true;
 
 					if (s3 == null)
 					{

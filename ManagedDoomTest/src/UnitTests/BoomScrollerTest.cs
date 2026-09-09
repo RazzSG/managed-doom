@@ -154,6 +154,7 @@ public sealed class BoomScrollerTest
 
         Assert.AreEqual(expectedDx.Data, thing.MomX.Data);
         Assert.AreEqual(expectedDy.Data, thing.MomY.Data);
+        Assert.IsTrue(thing.MbfScrollingMovement);
         Assert.AreEqual(Fixed.Zero.Data, sector.FloorXOffset.Data);
         Assert.AreEqual(Fixed.Zero.Data, sector.FloorYOffset.Data);
     }
@@ -193,6 +194,55 @@ public sealed class BoomScrollerTest
         Assert.AreEqual(expectedFloorDy.Data, sector.FloorYOffset.Data);
         Assert.AreEqual(expectedCarryDx.Data, thing.MomX.Data);
         Assert.AreEqual(expectedCarryDy.Data, thing.MomY.Data);
+    }
+
+    [TestMethod]
+    public void CarryScrollerKeepsCarryingThingWhoseOriginCrossedSectorBoundary()
+    {
+        using var content = GameContent.CreateDummy(WadPath.Doom2);
+        var world = new World(content, new GameOptions { Compatibility = GameCompatibility.Boom }, null);
+        var boundary = world.Map.Lines.First(line =>
+            line.FrontSector != null &&
+            line.BackSector != null &&
+            !object.ReferenceEquals(line.FrontSector, line.BackSector));
+
+        var thing = new Mobj(world)
+        {
+            X = (boundary.Vertex1.X + boundary.Vertex2.X) / 2,
+            Y = (boundary.Vertex1.Y + boundary.Vertex2.Y) / 2,
+            Radius = Fixed.FromInt(16),
+            Flags = MobjFlags.Solid
+        };
+
+        world.ThingMovement.SetThingPosition(thing);
+
+        var originSector = thing.Subsector.Sector;
+        var conveyorSector = object.ReferenceEquals(originSector, boundary.FrontSector)
+            ? boundary.BackSector
+            : boundary.FrontSector;
+
+        Assert.IsNotNull(conveyorSector);
+        Assert.AreNotSame(conveyorSector, originSector);
+        Assert.IsTrue(TouchesSector(thing, conveyorSector),
+            "Test thing must overlap the conveyor sector through its radius.");
+        Assert.IsFalse(IsInSectorThingList(conveyorSector, thing),
+            "The regression requires the thing origin/subsector to belong to the neighbouring sector.");
+
+        thing.Z = conveyorSector.FloorHeight;
+        thing.MomX = Fixed.Zero;
+        thing.MomY = Fixed.Zero;
+
+        var carryDx = Fixed.FromInt(2);
+        var carryDy = Fixed.FromInt(-1);
+        var scroller = new BoomScroller(BoomScrollerType.Carry, conveyorSector, carryDx, carryDy);
+
+        scroller.Run();
+
+        Assert.AreEqual(carryDx.Data, thing.MomX.Data);
+        Assert.AreEqual(carryDy.Data, thing.MomY.Data);
+
+        world.ThingMovement.UnsetThingPosition(thing);
+        world.ThingMovement.RemoveTouchingSectorLinks(thing);
     }
 
     [TestMethod]
@@ -877,6 +927,28 @@ public sealed class BoomScrollerTest
         BoomScrollerSpawner.SpawnScrollers(world);
 
         Assert.IsNull(TryFindScroller(world, sector, BoomScrollerType.Floor));
+    }
+
+    private static bool TouchesSector(Mobj thing, Sector sector)
+    {
+        for (var node = thing.TouchingSectorList; node != null; node = node.ThingNext)
+        {
+            if (object.ReferenceEquals(node.Sector, sector))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsInSectorThingList(Sector sector, Mobj thing)
+    {
+        for (var current = sector.ThingList; current != null; current = current.SectorNext)
+        {
+            if (object.ReferenceEquals(current, thing))
+                return true;
+        }
+
+        return false;
     }
 
     private static LineDef FindUnusedLine(World world)

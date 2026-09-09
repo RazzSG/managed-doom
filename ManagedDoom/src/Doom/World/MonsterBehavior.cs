@@ -18,17 +18,22 @@
 using System;
 using ManagedDoom.Compatibility;
 using ManagedDoom.Compatibility.Boom.Doors;
-using ManagedDoom.Compatibility.Boom.Gameplay;
+using ManagedDoom.Compatibility.Boom.Friction;
+using ManagedDoom.Compatibility.Mbf.AI;
+using ManagedDoom.Compatibility.Mbf.Gameplay;
+using ManagedDoom.Compatibility.Mbf.Movement;
 
 namespace ManagedDoom
 {
     public sealed class MonsterBehavior
     {
         private World world;
+        private MbfDropoffCompatibility mbfDropoffCompatibility;
 
         public MonsterBehavior(World world)
         {
             this.world = world;
+            mbfDropoffCompatibility = new MbfDropoffCompatibility(world);
 
             InitVile();
             InitBossDeath();
@@ -97,9 +102,53 @@ namespace ManagedDoom
                 }
 
                 actor.Target = player.Mobj;
+                MbfPursuit.ApplyPlayerAcquireThreshold(
+                    world.Options.Compatibility,
+                    world.Options.MbfOptions.CompPursuit,
+                    actor);
 
                 return true;
             }
+        }
+
+
+        private bool LookForTargets(Mobj actor, bool allAround)
+        {
+            if (!GameCompatibilityFeatures.SupportsMbfFriendAi(world.Options.Compatibility) ||
+                !MbfFriendTargeting.IsFriendly(world.Options.Compatibility, actor))
+            {
+                return LookForPlayers(actor, allAround);
+            }
+
+            // MBF friends prefer hostile monsters. If none are available, they
+            // return to a live player as a follow target without treating the
+            // player as an attack target.
+            if (MbfFriendTargeting.TryFindHostileMonster(
+                    world,
+                    actor,
+                    allAround,
+                    out var hostile))
+            {
+                actor.Target = hostile;
+                return true;
+            }
+
+            if (MbfFriendTargeting.TryFindPlayerToFollow(
+                    world,
+                    actor,
+                    allAround,
+                    out var player))
+            {
+                actor.Target = player;
+                actor.Flags &= ~MobjFlags.JustHit;
+                MbfPursuit.ApplyPlayerAcquireThreshold(
+                    world.Options.Compatibility,
+                    world.Options.MbfOptions.CompPursuit,
+                    actor);
+                return true;
+            }
+
+            return false;
         }
 
 
@@ -107,10 +156,19 @@ namespace ManagedDoom
         {
             // Any shot will wake up.
             actor.Threshold = 0;
+            if (GameCompatibilityFeatures.SupportsMbfPursuit(world.Options.Compatibility))
+            {
+                actor.PursueCount = 0;
+            }
 
             var target = actor.Subsector.Sector.SoundTarget;
 
-            if (target != null && (target.Flags & MobjFlags.Shootable) != 0)
+            if (target != null &&
+                (target.Flags & MobjFlags.Shootable) != 0 &&
+                MbfFriendTargeting.CanAcquireTarget(
+                    world.Options.Compatibility,
+                    actor,
+                    target))
             {
                 actor.Target = target;
 
@@ -127,7 +185,7 @@ namespace ManagedDoom
                 }
             }
 
-            if (!LookForPlayers(actor, false))
+            if (!LookForTargets(actor, false))
             {
                 return;
             }
@@ -200,7 +258,9 @@ namespace ManagedDoom
             new Fixed(-47000)
         };
 
-        private bool Move(Mobj actor)
+        private bool Move(
+            Mobj actor,
+            ThingDropoffMode dropoffMode = ThingDropoffMode.Disallow)
         {
             if (actor.MoveDir == Direction.None)
             {
@@ -212,12 +272,71 @@ namespace ManagedDoom
                 throw new Exception("Weird actor->movedir!");
             }
 
-            var tryX = actor.X + actor.Info.Speed * xSpeed[(int)actor.MoveDir];
-            var tryY = actor.Y + actor.Info.Speed * ySpeed[(int)actor.MoveDir];
+            var compatibility = world.Options.Compatibility;
+            var useMonsterFriction = MbfMonsterFriction.Applies(
+                compatibility,
+                world.Options.MbfOptions.MonsterFriction,
+                actor);
+
+            var friction = BoomFrictionTranslator.OriginalFriction;
+            var moveFactor = BoomFrictionTranslator.OriginalMoveFactor;
+            var speed = actor.Info.Speed;
+
+            if (useMonsterFriction)
+            {
+                MbfMonsterFriction.ResolveMovementProperties(
+                    compatibility,
+                    true,
+                    actor,
+                    out friction,
+                    out moveFactor);
+
+                speed = MbfMonsterFriction.GetAdjustedStepSpeed(
+                    speed,
+                    friction,
+                    moveFactor);
+            }
+
+            var deltaX = speed * xSpeed[(int)actor.MoveDir];
+            var deltaY = speed * ySpeed[(int)actor.MoveDir];
+            var tryX = actor.X + deltaX;
+            var tryY = actor.Y + deltaY;
 
             var tm = world.ThingMovement;
+            bool tryOk;
 
-            var tryOk = tm.TryMove(actor, tryX, tryY);
+            if (useMonsterFriction && MbfMonsterFriction.UsesMomentumStep(friction))
+            {
+                // MBF first validates the complete intended step on ice so
+                // collision and crossed-line effects remain identical. On a
+                // successful step the actor is then restored to its previous
+                // position and the step is converted into horizontal momentum.
+                var oldX = actor.X;
+                var oldY = actor.Y;
+                var oldFloorZ = actor.FloorZ;
+                var oldDropoffZ = actor.DropoffZ;
+                var oldCeilingZ = actor.CeilingZ;
+
+                tryOk = tm.TryMove(actor, tryX, tryY, dropoffMode);
+                if (tryOk)
+                {
+                    tm.UnsetThingPosition(actor);
+                    actor.X = oldX;
+                    actor.Y = oldY;
+                    actor.FloorZ = oldFloorZ;
+                    actor.DropoffZ = oldDropoffZ;
+                    actor.CeilingZ = oldCeilingZ;
+                    tm.SetThingPosition(actor);
+
+                    var momentumScale = MbfMonsterFriction.GetMomentumStepScale(moveFactor);
+                    actor.MomX += deltaX * momentumScale;
+                    actor.MomY += deltaY * momentumScale;
+                }
+            }
+            else
+            {
+                tryOk = tm.TryMove(actor, tryX, tryY, dropoffMode);
+            }
 
             if (!tryOk)
             {
@@ -264,10 +383,19 @@ namespace ManagedDoom
                     return false;
                 }
 
-                var compatibility = world.Options.Compatibility;
                 if (!GameCompatibilityFeatures.SupportsBoom(compatibility))
                 {
                     // Preserve the original Doom behavior without consuming a random byte.
+                    return true;
+                }
+
+                // Original MBF short-circuits comp_doorstuck before
+                // consuming pr_opendoor. Keep that ordering for demo/RNG fidelity.
+                if (MbfDoorStuck.UsesClassicBlockedDoorResult(
+                        compatibility,
+                        world.Options.MbfOptions.CompDoorStuck,
+                        activatedFlags))
+                {
                     return true;
                 }
 
@@ -281,7 +409,7 @@ namespace ManagedDoom
                 actor.Flags &= ~MobjFlags.InFloat;
             }
 
-            if ((actor.Flags & MobjFlags.Float) == 0)
+            if ((actor.Flags & MobjFlags.Float) == 0 && !tm.FellDown)
             {
                 actor.Z = actor.FloorZ;
             }
@@ -292,9 +420,75 @@ namespace ManagedDoom
 
         private bool TryWalk(Mobj actor)
         {
-            if (!Move(actor))
+            var compatibility = world.Options.Compatibility;
+            var avoidHazards = MbfMonsterHazardAvoidance.Applies(
+                compatibility,
+                world.Options.MbfOptions.MonsterAvoidHazards);
+            var wasUnderDamage = avoidHazards && MbfMonsterHazardAvoidance.IsUnderDamage(actor);
+            var trackStayOnLift = MbfStayOnLift.ShouldTrackBeforeMove(
+                world,
+                world.Options.MbfOptions.CompStayLift,
+                actor);
+
+            var dropoffMode = ThingDropoffMode.Disallow;
+            var target = actor.Target;
+            if (MbfDogJumping.CanAttempt(
+                    compatibility,
+                    world.Options.MbfOptions.DogJumping,
+                    actor,
+                    target))
+            {
+                // Match MBF's random consumption: the byte is consumed only
+                // after all deterministic dog/target conditions have passed.
+                if (MbfDogJumping.PassesRandom(world.Random.Next()))
+                {
+                    dropoffMode = ThingDropoffMode.Targeted128;
+                }
+            }
+
+            if (!Move(actor, dropoffMode))
             {
                 return false;
+            }
+
+            var abandonDirection = false;
+
+            if (trackStayOnLift)
+            {
+                // Preserve MBF's evaluation order: once the pre-move lift
+                // condition is true, pr_stayonlift is consumed before the
+                // post-move P_IsOnLift check.
+                var stayOnLiftRandom = world.Random.Next();
+                var isOnLiftAfterMove = MbfFriendDistance.IsOnLift(world, actor);
+                abandonDirection = MbfStayOnLift.ShouldAbandonDirectionAfterMove(
+                    compatibility,
+                    world.Options.MbfOptions.CompStayLift,
+                    true,
+                    stayOnLiftRandom,
+                    isOnLiftAfterMove);
+            }
+
+            if (!abandonDirection && avoidHazards && !wasUnderDamage)
+            {
+                var currentHazardDirection = MbfMonsterHazardAvoidance.GetCurrentHazardDirection(actor);
+
+                // Original MBF always rejects a newly entered downward crusher.
+                // An upward/milder ceiling hazard is rejected 200/256 of the time.
+                // Do not consume the extra random byte unless the moderate
+                // probability check is actually needed.
+                var shouldAvoid = currentHazardDirection < 0
+                    ? MbfMonsterHazardAvoidance.ShouldAbandonDirection(
+                        compatibility, false, currentHazardDirection, 0)
+                    : currentHazardDirection > 0 &&
+                      MbfMonsterHazardAvoidance.ShouldAbandonDirection(
+                          compatibility, false, currentHazardDirection, world.Random.Next());
+
+                abandonDirection = shouldAvoid;
+            }
+
+            if (abandonDirection)
+            {
+                actor.MoveDir = Direction.None;
             }
 
             actor.MoveCount = world.Random.Next() & 15;
@@ -333,11 +527,69 @@ namespace ManagedDoom
                 throw new Exception("Called with no target.");
             }
 
-            var oldDir = actor.MoveDir;
-            var turnAround = opposite[(int)oldDir];
-
             var deltaX = actor.Target.X - actor.X;
             var deltaY = actor.Target.Y - actor.Y;
+
+            // MBF resets the temporary strafing/backing state every time a
+            // new chase direction is selected. Friend-distance movement does
+            // not count as strafing; only monster_backing may set it below.
+            actor.StrafeCount = 0;
+
+            if (mbfDropoffCompatibility.TryGetAvoidanceDelta(
+                    world.Options.MbfOptions.CompDropoff,
+                    actor,
+                    out var avoidDropoffX,
+                    out var avoidDropoffY))
+            {
+                DoNewChaseDir(actor, avoidDropoffX, avoidDropoffY);
+
+                // Original MBF takes one short step at a time while freeing a
+                // monster that was involuntarily pushed over a tall ledge.
+                actor.MoveCount = 1;
+                return;
+            }
+
+            if (MbfFriendDistance.ShouldMoveAway(
+                    world,
+                    actor,
+                    actor.Target,
+                    world.Options.MbfOptions.FriendDistanceFixed))
+            {
+                // Original MBF does not stop a close friend. It reverses the
+                // chase delta only when a new direction is needed, so the
+                // actor actively creates space without adding a per-tic hold.
+                deltaX = -deltaX;
+                deltaY = -deltaY;
+            }
+            else if (MbfMonsterBacking.ShouldBackAway(
+                    world.Options.Compatibility,
+                    world.Options.MbfOptions.MonsterBacking,
+                    actor,
+                    actor.Target))
+            {
+                // Original MBF keeps a separate strafecount while backing.
+                // Do not consume this random byte unless backing applies.
+                actor.StrafeCount = world.Random.Next() & 15;
+                deltaX = -deltaX;
+                deltaY = -deltaY;
+            }
+
+            DoNewChaseDir(actor, deltaX, deltaY);
+
+            // P_TryWalk may have assigned its normal random MoveCount while
+            // selecting a direction. MBF replaces that value with the strafe
+            // lifetime so the retreat lasts exactly as long as strafing does.
+            if (actor.StrafeCount != 0)
+            {
+                actor.MoveCount = actor.StrafeCount;
+            }
+        }
+
+
+        private void DoNewChaseDir(Mobj actor, Fixed deltaX, Fixed deltaY)
+        {
+            var oldDir = actor.MoveDir;
+            var turnAround = opposite[(int)oldDir];
 
             if (deltaX > Fixed.FromInt(10))
             {
@@ -475,7 +727,7 @@ namespace ManagedDoom
         }
 
 
-        private bool CheckMeleeRange(Mobj actor)
+        internal bool CheckMeleeRange(Mobj actor)
         {
             if (actor.Target == null)
             {
@@ -483,6 +735,14 @@ namespace ManagedDoom
             }
 
             var target = actor.Target;
+
+            if (!MbfFriendTargeting.CanAcquireTarget(
+                    world.Options.Compatibility,
+                    actor,
+                    target))
+            {
+                return false;
+            }
 
             var dist = Geometry.AproxDistance(target.X - actor.X, target.Y - actor.Y);
 
@@ -513,6 +773,14 @@ namespace ManagedDoom
                 actor.Flags &= ~MobjFlags.JustHit;
 
                 return true;
+            }
+
+            if (!MbfFriendTargeting.CanAcquireTarget(
+                    world.Options.Compatibility,
+                    actor,
+                    actor.Target))
+            {
+                return false;
             }
 
             if (actor.ReactionTime > 0)
@@ -602,8 +870,15 @@ namespace ManagedDoom
                 }
             }
 
-            // Turn towards movement direction if not there yet.
-            if ((int)actor.MoveDir < 8)
+            // MBF keeps a backing monster facing its target instead of turning
+            // toward the retreat direction. Pre-MBF compatibility keeps the
+            // original Doom turning path even if a stale StrafeCount exists.
+            if (GameCompatibilityFeatures.SupportsMbfMonsterBacking(world.Options.Compatibility) &&
+                actor.StrafeCount > 0)
+            {
+                FaceTarget(actor);
+            }
+            else if ((int)actor.MoveDir < 8)
             {
                 actor.Angle = new Angle((int)actor.Angle.Data & (7 << 29));
 
@@ -621,8 +896,22 @@ namespace ManagedDoom
 
             if (actor.Target == null || (actor.Target.Flags & MobjFlags.Shootable) == 0)
             {
-                // Look for a new target.
-                if (LookForPlayers(actor, true))
+                // MBF first resumes the enemy remembered before a temporary
+                // retaliation target. If that target is no longer usable, fall
+                // back to the normal target search.
+                if (MbfMonsterTargetMemory.TryRestorePreviousEnemy(
+                        world.Options.Compatibility,
+                        world.Options.MbfOptions.MonstersRemember,
+                        actor))
+                {
+                    // Restoring LastEnemy is itself a successful MBF target
+                    // search. Match A_Chase/P_LookForTargets and stop this
+                    // chase tic here so pursuit does not immediately replace
+                    // the remembered target before it gets a chance to act.
+                    return;
+                }
+
+                if (LookForTargets(actor, true))
                 {
                     // Got a new target.
                     return;
@@ -682,19 +971,73 @@ namespace ManagedDoom
             }
 
             noMissile:
-            // Possibly choose another target.
-            if (world.Options.NetGame &&
-                actor.Threshold == 0 &&
-                !world.VisibilityCheck.CheckSight(actor, actor.Target))
+            // MBF only considers rescuing a friend after the normal attack
+            // opportunities have been processed, and only after the target
+            // threshold has expired. This keeps temporary targets sticky and
+            // avoids an unnecessary thinker scan while Threshold > 0.
+            if (actor.Threshold == 0 &&
+                world.Options.MbfOptions.HelpFriends &&
+                MbfFriendAssistance.TryAcquireThreat(
+                    world,
+                    optionEnabled: true,
+                    actor))
             {
-                if (LookForPlayers(actor, true))
+                return;
+            }
+
+            // MBF periodically re-evaluates the current target. comp_pursuit
+            // preserves Doom's single-player behavior where a living target is
+            // kept even after it goes out of view. Pre-MBF compatibility keeps
+            // ManagedDoom's existing netgame-only retarget path.
+            if (actor.Threshold == 0)
+            {
+                if (GameCompatibilityFeatures.SupportsMbfPursuit(world.Options.Compatibility))
                 {
-                    // Got a new target.
-                    return;
+                    if (actor.PursueCount > 0)
+                    {
+                        actor.PursueCount--;
+                    }
+                    else
+                    {
+                        actor.PursueCount = MbfPursuit.BaseThreshold;
+
+                        var targetVisible = actor.Target != null &&
+                            world.VisibilityCheck.CheckSight(actor, actor.Target);
+
+                        if (!MbfPursuit.ShouldKeepCurrentTarget(
+                                world.Options.Compatibility,
+                                world.Options.MbfOptions.CompPursuit,
+                                world.Options.NetGame,
+                                world.Options.MbfOptions.MonsterInfighting,
+                                actor,
+                                actor.Target,
+                                targetVisible) &&
+                            LookForTargets(actor, true))
+                        {
+                            return;
+                        }
+                    }
+                }
+                else if (world.Options.NetGame &&
+                         !world.VisibilityCheck.CheckSight(actor, actor.Target))
+                {
+                    if (LookForTargets(actor, true))
+                    {
+                        // Got a new target.
+                        return;
+                    }
                 }
             }
 
-            // Chase towards player.
+            // In MBF strafecount counts down only on tics that actually reach
+            // the movement portion of A_Chase. Attack/retarget early-outs leave
+            // it untouched.
+            if (GameCompatibilityFeatures.SupportsMbfMonsterBacking(world.Options.Compatibility) &&
+                actor.StrafeCount > 0)
+            {
+                actor.StrafeCount--;
+            }
+
             if (--actor.MoveCount < 0 || !Move(actor))
             {
                 NewChaseDir(actor);
@@ -1202,19 +1545,21 @@ namespace ManagedDoom
             vileTargetCorpse = thing;
             vileTargetCorpse.MomX = vileTargetCorpse.MomY = Fixed.Zero;
 
-            var fitState = BoomGameplayBugFixes.PrepareArchVileCorpseForFitCheck(
+            var fitState = MbfArchVileCompatibility.PrepareCorpseForFitCheck(
                 vileTargetCorpse,
-                world.Options.Compatibility);
+                world.Options.Compatibility,
+                world.Options.MbfOptions.CompVile);
 
             var check = world.ThingMovement.CheckPosition(
                 vileTargetCorpse,
                 vileTargetCorpse.X,
                 vileTargetCorpse.Y);
 
-            BoomGameplayBugFixes.RestoreArchVileCorpseAfterFitCheck(
+            MbfArchVileCompatibility.RestoreCorpseAfterFitCheck(
                 vileTargetCorpse,
                 fitState,
-                world.Options.Compatibility);
+                world.Options.Compatibility,
+                world.Options.MbfOptions.CompVile);
 
             if (!check)
             {
@@ -1262,9 +1607,10 @@ namespace ManagedDoom
                             var info = vileTargetCorpse.Info;
                             vileTargetCorpse.SetState(info.Raisestate);
 
-                            BoomGameplayBugFixes.ApplyArchVileResurrectionDimensions(
+                            MbfArchVileCompatibility.ApplyResurrectionDimensions(
                                 vileTargetCorpse,
-                                world.Options.Compatibility);
+                                world.Options.Compatibility,
+                                world.Options.MbfOptions.CompVile);
 
                             vileTargetCorpse.Flags = info.Flags;
                             vileTargetCorpse.Health = info.SpawnHealth;
@@ -1539,7 +1885,9 @@ namespace ManagedDoom
 
         private void PainShootSkull(Mobj actor, Angle angle)
         {
-            if (BoomGameplayBugFixes.EnforcesPainElementalLostSoulLimit(world.Options.Compatibility))
+            if (MbfPainElementalCompatibility.EnforcesLostSoulLimit(
+                world.Options.Compatibility,
+                world.Options.MbfOptions.CompPain))
             {
                 // Vanilla Doom limits the level to 21 existing Lost Souls.
                 var count = 0;
@@ -1566,7 +1914,7 @@ namespace ManagedDoom
             var y = actor.Y + preStep * Trig.Sin(angle);
             var z = actor.Z + Fixed.FromInt(8);
 
-            if (BoomGameplayBugFixes.IsPainElementalLostSoulSpawnBlocked(world, actor, x, y))
+            if (MbfSkullSpawnCompatibility.IsLostSoulSpawnBlocked(world, actor, x, y))
             {
                 return;
             }
@@ -1574,8 +1922,8 @@ namespace ManagedDoom
             var skull = world.ThingAllocation.SpawnMobj(x, y, z, MobjType.Skull);
 
             var sector = skull.Subsector.Sector;
-            if (BoomGameplayBugFixes.IsPainElementalLostSoulOutsideVerticalBounds(
-                world.Options.Compatibility,
+            if (MbfSkullSpawnCompatibility.IsLostSoulOutsideVerticalBounds(
+                world,
                 skull.Z,
                 skull.Height,
                 sector.FloorHeight,
@@ -1653,75 +2001,14 @@ namespace ManagedDoom
             }
             else
             {
-                switch (options.Episode)
+                if (!MbfBossDeathCompatibility.IsNonCommercialBossDeathTrigger(
+                        options.Compatibility,
+                        options.MbfOptions.Comp666,
+                        options.Episode,
+                        options.Map,
+                        actor.Type))
                 {
-                    case 1:
-                        if (options.Map != 8)
-                        {
-                            return;
-                        }
-
-                        if (actor.Type != MobjType.Bruiser)
-                        {
-                            return;
-                        }
-
-                        break;
-
-                    case 2:
-                        if (options.Map != 8)
-                        {
-                            return;
-                        }
-
-                        if (actor.Type != MobjType.Cyborg)
-                        {
-                            return;
-                        }
-
-                        break;
-
-                    case 3:
-                        if (options.Map != 8)
-                        {
-                            return;
-                        }
-
-                        if (actor.Type != MobjType.Spider)
-                        {
-                            return;
-                        }
-
-                        break;
-
-                    case 4:
-                        switch (options.Map)
-                        {
-                            case 6:
-                                if (actor.Type != MobjType.Cyborg)
-                                {
-                                    return;
-                                }
-
-                                break;
-
-                            case 8:
-                                if (actor.Type != MobjType.Spider)
-                                {
-                                    return;
-                                }
-
-                                break;
-
-                            default:
-                                return;
-                        }
-                        break;
-
-                    default:
-                        // Vanilla boss-death rules are episode-specific.
-                        // Custom episodes must not inherit E1-E4 boss actions by accident.
-                        return;
+                    return;
                 }
             }
 

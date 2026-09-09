@@ -18,6 +18,7 @@
 using System;
 using ManagedDoom.Compatibility.Boom;
 using ManagedDoom.Compatibility.Boom.Rendering;
+using ManagedDoom.Compatibility.Mbf;
 
 namespace ManagedDoom
 {
@@ -34,6 +35,7 @@ namespace ManagedDoom
         private ISpriteLookup sprites;
         private TextureAnimation animation;
         private BoomAnimated boomAnimated;
+        private MbfOptions mbfOptions;
 
         private GameContent()
         {
@@ -46,6 +48,7 @@ namespace ManagedDoom
                 wad = new Wad(ConfigUtilities.GetWadPaths(args));
 
                 DeHackEd.Initialize(args, wad);
+                mbfOptions = MbfOptionsReader.Read(wad);
 
                 palette = new Palette(wad);
                 colorMap = new ColorMap(wad);
@@ -72,6 +75,7 @@ namespace ManagedDoom
             try
             {
                 gc.wad = new Wad(wadPaths);
+                gc.mbfOptions = MbfOptionsReader.Read(gc.wad);
                 gc.palette = new Palette(gc.wad);
                 gc.colorMap = new ColorMap(gc.wad);
                 gc.trueColorMap = new TrueColorMap(gc.palette, gc.colorMap);
@@ -112,5 +116,6 @@ namespace ManagedDoom
         public ISpriteLookup Sprites => sprites;
         public TextureAnimation Animation => animation;
         public BoomAnimated BoomAnimated => boomAnimated;
+        public MbfOptions MbfOptions => mbfOptions;
     }
 }

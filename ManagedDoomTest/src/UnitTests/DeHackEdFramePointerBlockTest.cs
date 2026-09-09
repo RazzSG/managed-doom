@@ -144,6 +144,41 @@ Codep Frame = 186
             }
         }
 
+        [DataTestMethod]
+        [DataRow(968, "Die")]
+        [DataRow(969, "Scream")]
+        [DataRow(970, "Detonate")]
+        [DataRow(1062, "BetaSkullAttack")]
+        [DataRow(1074, "Stop")]
+        [DataRow(1075, "Mushroom")]
+        public void ClassicMbfSourceFrameCopiesOriginalAction(int sourceFrame, string expectedAction)
+        {
+            var patch = CreatePatch($@"
+Patch File for DeHackEd v3.0
+Doom version = 19
+Patch format = 6
+
+Pointer 1 (Frame 194)
+Codep Frame = {sourceFrame}
+");
+
+            using var wad = new Wad(WadPath.Doom2);
+
+            try
+            {
+                DeHackEd.Initialize(ArgsForPatch(patch), wad);
+
+                Assert.IsNull(DoomInfo.States[194].PlayerAction);
+                Assert.IsNotNull(DoomInfo.States[194].MobjAction);
+                Assert.AreEqual(expectedAction, DoomInfo.States[194].MobjAction.Method.Name);
+            }
+            finally
+            {
+                Reset(wad);
+                File.Delete(patch);
+            }
+        }
+
         [TestMethod]
         public void InvalidPointerTargetsAndSourcesAreIgnoredAndParsingContinues()
         {

@@ -159,6 +159,12 @@ namespace ManagedDoom
         BRS1,
         TLMP,
         TLP2,
+        TNT1,
+        DOGS,
+        PLS1,
+        PLS2,
+        BON3,
+        BON4,
         Count
     }
 }

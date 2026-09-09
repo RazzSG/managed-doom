@@ -38,6 +38,71 @@ public sealed class BoomPointPusherTest
     }
 
     [TestMethod]
+    public void MbfPointPusherUsesInverseSquareFalloffInsideBoomRadius()
+    {
+        const int magnitude = 513;
+        var distance = Fixed.FromInt(400);
+
+        var boomSpeed = BoomPusherTranslator.ResolvePointSpeed(
+            magnitude,
+            distance,
+            Fixed.Zero);
+        var mbfSpeed = BoomPusherTranslator.ResolveMbfPointSpeed(
+            magnitude,
+            distance,
+            Fixed.Zero);
+
+        Assert.AreEqual((513 - (400 >> 1)) << 8, boomSpeed.Data);
+        Assert.AreEqual((int)(((long)513 << 23) / ((400L * 400L) + 1)), mbfSpeed.Data);
+        Assert.IsTrue(mbfSpeed.Data < boomSpeed.Data / 2);
+    }
+
+    [TestMethod]
+    public void MbfPointPusherStillUsesBoomRadiusAsRangeGate()
+    {
+        const int magnitude = 513;
+
+        Assert.IsTrue(BoomPusherTranslator.ResolveMbfPointSpeed(
+            magnitude,
+            Fixed.FromInt(1025),
+            Fixed.Zero) > Fixed.Zero);
+        Assert.AreEqual(Fixed.Zero.Data, BoomPusherTranslator.ResolveMbfPointSpeed(
+            magnitude,
+            Fixed.FromInt(1026),
+            Fixed.Zero).Data);
+    }
+
+    [TestMethod]
+    public void CompatibilitySelectsBoomOrMbfPointPusherFalloff()
+    {
+        const int magnitude = 513;
+        var distance = Fixed.FromInt(400);
+        var boom = BoomPusherTranslator.ResolvePointSpeed(
+            GameCompatibility.Boom,
+            magnitude,
+            distance,
+            Fixed.Zero);
+        var mbf = BoomPusherTranslator.ResolvePointSpeed(
+            GameCompatibility.Mbf,
+            magnitude,
+            distance,
+            Fixed.Zero);
+        var mbf21 = BoomPusherTranslator.ResolvePointSpeed(
+            GameCompatibility.Mbf21,
+            magnitude,
+            distance,
+            Fixed.Zero);
+
+        Assert.AreEqual(
+            BoomPusherTranslator.ResolvePointSpeed(magnitude, distance, Fixed.Zero).Data,
+            boom.Data);
+        Assert.AreEqual(
+            BoomPusherTranslator.ResolveMbfPointSpeed(magnitude, distance, Fixed.Zero).Data,
+            mbf.Data);
+        Assert.AreEqual(mbf.Data, mbf21.Data);
+    }
+
+    [TestMethod]
     public void PointMagnitudeUsesIntegerLinedefComponents()
     {
         var dx = new Fixed((64 << Fixed.FracBits) + Fixed.FracUnit - 1);
@@ -139,6 +204,7 @@ public sealed class BoomPointPusherTest
         var pullY = thing.MomY;
 
         Assert.IsTrue(pullX != Fixed.Zero || pullY != Fixed.Zero);
+        Assert.IsTrue(thing.MbfScrollingMovement);
 
         thing.MomX = Fixed.Zero;
         thing.MomY = Fixed.Zero;
@@ -284,6 +350,90 @@ public sealed class BoomPointPusherTest
         thing.Run();
 
         Assert.IsTrue(thing.MomX != Fixed.Zero || thing.MomY != Fixed.Zero);
+    }
+
+    [TestMethod]
+    public void MbfMonsterMobjRunAppliesResolvedBoomPointPusher()
+    {
+        using var content = GameContent.CreateDummy(WadPath.Doom2);
+        var world = new World(content, new GameOptions { Compatibility = GameCompatibility.Mbf }, null);
+        var player = world.ConsolePlayer.Mobj;
+        var line = FindUnusedLine(world);
+        var source = FindSourcePointInPlayerSector(world);
+        var sector = source.Sector;
+
+        ConfigurePointPusherMap(
+            world,
+            line,
+            sector,
+            source.X,
+            source.Y,
+            BoomPointPusher.PushSourceThingType);
+
+        var monster = world.ThingAllocation.SpawnMobj(
+            player.X,
+            player.Y,
+            Mobj.OnFloorZ,
+            MobjType.Troop);
+        monster.MomX = Fixed.Zero;
+        monster.MomY = Fixed.Zero;
+
+        world.Specials.SpawnSpecials();
+        monster.Run();
+
+        Assert.IsTrue(
+            monster.MomX != Fixed.Zero || monster.MomY != Fixed.Zero,
+            "MBF point pushers must affect living sentient monsters, not just players.");
+    }
+
+    [TestMethod]
+    public void BoomMonsterMobjRunKeepsPointPusherPlayerOnly()
+    {
+        using var content = GameContent.CreateDummy(WadPath.Doom2);
+        var world = new World(content, new GameOptions { Compatibility = GameCompatibility.Boom }, null);
+        var player = world.ConsolePlayer.Mobj;
+        var line = FindUnusedLine(world);
+        var source = FindSourcePointInPlayerSector(world);
+        var sector = source.Sector;
+
+        ConfigurePointPusherMap(
+            world,
+            line,
+            sector,
+            source.X,
+            source.Y,
+            BoomPointPusher.PushSourceThingType);
+
+        var monster = world.ThingAllocation.SpawnMobj(
+            player.X,
+            player.Y,
+            Mobj.OnFloorZ,
+            MobjType.Troop);
+        monster.MomX = Fixed.Zero;
+        monster.MomY = Fixed.Zero;
+
+        world.Specials.SpawnSpecials();
+        monster.Run();
+
+        Assert.AreEqual(Fixed.Zero.Data, monster.MomX.Data);
+        Assert.AreEqual(Fixed.Zero.Data, monster.MomY.Data);
+    }
+
+    [TestMethod]
+    public void MbfPointPusherAlsoAcceptsNoGravitySentientMonster()
+    {
+        using var content = GameContent.CreateDummy(WadPath.Doom2);
+        var world = new World(content, new GameOptions { Compatibility = GameCompatibility.Mbf }, null);
+        var player = world.ConsolePlayer.Mobj;
+        var flyingMonster = world.ThingAllocation.SpawnMobj(
+            player.X,
+            player.Y,
+            Mobj.OnFloorZ,
+            MobjType.Head);
+
+        Assert.IsTrue((flyingMonster.Flags & MobjFlags.NoGravity) != 0);
+        Assert.IsTrue(BoomPointPusher.CanAffect(GameCompatibility.Mbf, flyingMonster));
+        Assert.IsFalse(BoomPointPusher.CanAffect(GameCompatibility.Boom, flyingMonster));
     }
 
     [TestMethod]

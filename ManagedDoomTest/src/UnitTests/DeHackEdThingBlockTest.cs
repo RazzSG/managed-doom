@@ -72,6 +72,8 @@ Respawn frame = 17
                 Assert.AreEqual(13, info.Damage);
                 Assert.AreEqual(5, (int)info.ActiveSound);
                 Assert.AreEqual(4194310, (int)info.Flags);
+                Assert.IsFalse(info.Translucent);
+                Assert.IsTrue(info.HasDeHackEdBitsOverride);
                 Assert.AreEqual(17, (int)info.Raisestate);
             }
             finally

@@ -493,6 +493,23 @@ namespace ManagedDoom
                     mobjActionsByName.TryAdd(name, mobjAction);
                 }
             }
+
+            // MBF adds named BEX code pointers that do not occur in any
+            // vanilla state, so they cannot be discovered by scanning the
+            // original state table. Register each implemented MBF pointer
+            // explicitly as its runtime support lands.
+            mobjActionsByName.TryAdd("Spawn", DoomInfo.MbfSpawnAction);
+            mobjActionsByName.TryAdd("Turn", DoomInfo.MbfTurnAction);
+            mobjActionsByName.TryAdd("Face", DoomInfo.MbfFaceAction);
+            mobjActionsByName.TryAdd("RandomJump", DoomInfo.MbfRandomJumpAction);
+            mobjActionsByName.TryAdd("Die", DoomInfo.MbfDieAction);
+            mobjActionsByName.TryAdd("Detonate", DoomInfo.MbfDetonateAction);
+            mobjActionsByName.TryAdd("Stop", DoomInfo.MbfStopAction);
+            mobjActionsByName.TryAdd("PlaySound", DoomInfo.MbfPlaySoundAction);
+            mobjActionsByName.TryAdd("LineEffect", DoomInfo.MbfLineEffectAction);
+            mobjActionsByName.TryAdd("Scratch", DoomInfo.MbfScratchAction);
+            mobjActionsByName.TryAdd("BetaSkullAttack", DoomInfo.MbfBetaSkullAttackAction);
+            mobjActionsByName.TryAdd("Mushroom", DoomInfo.MbfMushroomAction);
         }
 
         private static int ConsumeTextLine(int remaining, string line)
@@ -619,7 +636,23 @@ namespace ManagedDoom
             info.Mass = GetInt(dic, "Mass", info.Mass);
             info.Damage = GetInt(dic, "Missile damage", info.Damage);
             info.ActiveSound = (Sfx)GetInt(dic, "Action sound", (int)info.ActiveSound);
-            info.Flags = (MobjFlags)GetInt(dic, "Bits", (int)info.Flags);
+
+            if (dic.TryGetValue("Bits", out var bitsText) &&
+                DeHackEdThingBits.TryParse(bitsText, out var rawBits))
+            {
+                // Canonical Boom/MBF layout:
+                //   0x10000000 TOUCHY
+                //   0x20000000 BOUNCES
+                //   0x40000000 FRIEND
+                //   0x80000000 TRANSLUCENT
+                // ManagedDoom stores translucency separately because MobjFlags
+                // has an Int32 backing type. Strip only the canonical high bit;
+                // FRIEND remains a real runtime simulation flag.
+                info.Translucent = (rawBits & DeHackEdThingBits.BoomTranslucentBit) != 0;
+                info.HasDeHackEdBitsOverride = true;
+                info.Flags = (MobjFlags)unchecked((int)(rawBits & ~DeHackEdThingBits.BoomTranslucentBit));
+            }
+
             info.Raisestate = (MobjState)GetInt(dic, "Respawn frame", (int)info.Raisestate);
         }
 
@@ -664,20 +697,59 @@ namespace ManagedDoom
                 return;
             }
 
-            if (!IsValidStateIndex(sourceFrameNumber))
+            if (!TryGetOriginalCodePointer(sourceFrameNumber, out var source))
             {
                 Console.WriteLine("Warning: invalid DeHackEd Codep Frame " + sourceFrameNumber + "; ignoring code pointer assignment.");
                 return;
             }
 
             var info = DoomInfo.States[targetFrameNumber];
-            var source = sourcePointerTable[sourceFrameNumber];
 
             // Classic DeHackEd Pointer sections copy from the immutable original
             // executable code-pointer table, not from a state that may already
             // have been modified by an earlier Pointer section in this patch.
             info.PlayerAction = source.Item1;
             info.MobjAction = source.Item2;
+        }
+
+        private static bool TryGetOriginalCodePointer(
+            int sourceFrameNumber,
+            out Tuple<Action<World, Player, PlayerSpriteDef>, Action<World, Mobj>> source)
+        {
+            // Classic MBF Pointer blocks address the original executable state
+            // table. Some of those source states are placeholders or are omitted
+            // from ManagedDoom's compact runtime table, so resolve their original
+            // actions before falling back to the ordinary immutable source table.
+            if (DeHackEdCodePointerSources.TryGetActionName(sourceFrameNumber, out var actionName))
+            {
+                if (playerActionsByName.TryGetValue(actionName, out var playerAction))
+                {
+                    source = Tuple.Create<Action<World, Player, PlayerSpriteDef>, Action<World, Mobj>>(
+                        playerAction,
+                        null);
+                    return true;
+                }
+
+                if (mobjActionsByName.TryGetValue(actionName, out var mobjAction))
+                {
+                    source = Tuple.Create<Action<World, Player, PlayerSpriteDef>, Action<World, Mobj>>(
+                        null,
+                        mobjAction);
+                    return true;
+                }
+
+                source = null;
+                return false;
+            }
+
+            if (sourceFrameNumber >= 0 && sourceFrameNumber < sourcePointerTable.Length)
+            {
+                source = sourcePointerTable[sourceFrameNumber];
+                return true;
+            }
+
+            source = null;
+            return false;
         }
 
         private static void ProcessSoundBlock(List<string> data)
@@ -813,7 +885,12 @@ namespace ManagedDoom
 
             DoomInfo.DeHackEdConst.InitialHealth = GetInt(dic, "Initial Health", DoomInfo.DeHackEdConst.InitialHealth);
             DoomInfo.DeHackEdConst.InitialBullets = GetInt(dic, "Initial Bullets", DoomInfo.DeHackEdConst.InitialBullets);
-            DoomInfo.DeHackEdConst.MaxHealth = GetInt(dic, "Max Health", DoomInfo.DeHackEdConst.MaxHealth);
+            if (dic.TryGetValue("Max Health", out var maxHealthText) &&
+                TryParseLeadingInt(maxHealthText, out var maxHealth))
+            {
+                DoomInfo.DeHackEdConst.MaxHealth = maxHealth;
+                DoomInfo.DeHackEdConst.HasMaxHealthOverride = true;
+            }
             DoomInfo.DeHackEdConst.MaxArmor = GetInt(dic, "Max Armor", DoomInfo.DeHackEdConst.MaxArmor);
             DoomInfo.DeHackEdConst.GreenArmorClass = GetInt(dic, "Green Armor Class", DoomInfo.DeHackEdConst.GreenArmorClass);
             DoomInfo.DeHackEdConst.BlueArmorClass = GetInt(dic, "Blue Armor Class", DoomInfo.DeHackEdConst.BlueArmorClass);

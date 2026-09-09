@@ -17,6 +17,7 @@
 
 using System;
 using System.Linq;
+using ManagedDoom.Compatibility.Mbf.Gameplay;
 
 namespace ManagedDoom
 {
@@ -239,13 +240,17 @@ namespace ManagedDoom
         private void ToggleInvulnerability()
         {
             var player = world.ConsolePlayer;
-            if (player.Powers[(int)PowerType.Invulnerability] > 0)
+            if (MbfPowerupCheatCompatibility.IsActive(player.Powers[(int)PowerType.Invulnerability]))
             {
                 player.Powers[(int)PowerType.Invulnerability] = 0;
             }
             else
             {
-                player.Powers[(int)PowerType.Invulnerability] = DoomInfo.PowerDuration.Invulnerability;
+                player.Powers[(int)PowerType.Invulnerability] = MbfPowerupCheatCompatibility.ResolveActivatedPowerValue(
+                    world.Options.Compatibility,
+                    world.Options.MbfOptions.CompInfCheat,
+                    PowerType.Invulnerability,
+                    DoomInfo.PowerDuration.Invulnerability);
             }
             player.SendMessage(DoomInfo.Strings.STSTR_BEHOLDX);
         }
@@ -267,14 +272,18 @@ namespace ManagedDoom
         private void ToggleInvisibility()
         {
             var player = world.ConsolePlayer;
-            if (player.Powers[(int)PowerType.Invisibility] > 0)
+            if (MbfPowerupCheatCompatibility.IsActive(player.Powers[(int)PowerType.Invisibility]))
             {
                 player.Powers[(int)PowerType.Invisibility] = 0;
                 player.Mobj.Flags &= ~MobjFlags.Shadow;
             }
             else
             {
-                player.Powers[(int)PowerType.Invisibility] = DoomInfo.PowerDuration.Invisibility;
+                player.Powers[(int)PowerType.Invisibility] = MbfPowerupCheatCompatibility.ResolveActivatedPowerValue(
+                    world.Options.Compatibility,
+                    world.Options.MbfOptions.CompInfCheat,
+                    PowerType.Invisibility,
+                    DoomInfo.PowerDuration.Invisibility);
                 player.Mobj.Flags |= MobjFlags.Shadow;
             }
             player.SendMessage(DoomInfo.Strings.STSTR_BEHOLDX);
@@ -283,13 +292,17 @@ namespace ManagedDoom
         private void ToggleIronFeet()
         {
             var player = world.ConsolePlayer;
-            if (player.Powers[(int)PowerType.IronFeet] > 0)
+            if (MbfPowerupCheatCompatibility.IsActive(player.Powers[(int)PowerType.IronFeet]))
             {
                 player.Powers[(int)PowerType.IronFeet] = 0;
             }
             else
             {
-                player.Powers[(int)PowerType.IronFeet] = DoomInfo.PowerDuration.IronFeet;
+                player.Powers[(int)PowerType.IronFeet] = MbfPowerupCheatCompatibility.ResolveActivatedPowerValue(
+                    world.Options.Compatibility,
+                    world.Options.MbfOptions.CompInfCheat,
+                    PowerType.IronFeet,
+                    DoomInfo.PowerDuration.IronFeet);
             }
             player.SendMessage(DoomInfo.Strings.STSTR_BEHOLDX);
         }
@@ -303,7 +316,11 @@ namespace ManagedDoom
             }
             else
             {
-                player.Powers[(int)PowerType.AllMap] = 1;
+                player.Powers[(int)PowerType.AllMap] = MbfPowerupCheatCompatibility.ResolveActivatedPowerValue(
+                    world.Options.Compatibility,
+                    world.Options.MbfOptions.CompInfCheat,
+                    PowerType.AllMap,
+                    1);
             }
             player.SendMessage(DoomInfo.Strings.STSTR_BEHOLDX);
         }
@@ -311,13 +328,17 @@ namespace ManagedDoom
         private void ToggleInfrared()
         {
             var player = world.ConsolePlayer;
-            if (player.Powers[(int)PowerType.Infrared] > 0)
+            if (MbfPowerupCheatCompatibility.IsActive(player.Powers[(int)PowerType.Infrared]))
             {
                 player.Powers[(int)PowerType.Infrared] = 0;
             }
             else
             {
-                player.Powers[(int)PowerType.Infrared] = DoomInfo.PowerDuration.Infrared;
+                player.Powers[(int)PowerType.Infrared] = MbfPowerupCheatCompatibility.ResolveActivatedPowerValue(
+                    world.Options.Compatibility,
+                    world.Options.MbfOptions.CompInfCheat,
+                    PowerType.Infrared,
+                    DoomInfo.PowerDuration.Infrared);
             }
             player.SendMessage(DoomInfo.Strings.STSTR_BEHOLDX);
         }

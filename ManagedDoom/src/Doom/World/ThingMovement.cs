@@ -20,6 +20,9 @@ using ManagedDoom.Compatibility;
 using ManagedDoom.Compatibility.Boom.Collision;
 using ManagedDoom.Compatibility.Boom.Movement;
 using ManagedDoom.Compatibility.Boom.Sectors;
+using ManagedDoom.Compatibility.Mbf.AI;
+using ManagedDoom.Compatibility.Mbf.Audio;
+using ManagedDoom.Compatibility.Mbf.Movement;
 
 namespace ManagedDoom
 {
@@ -27,11 +30,13 @@ namespace ManagedDoom
     {
         private World world;
         private BoomSectorTouchingList boomSectorTouchingList;
+        private BoomLedgeTorque boomLedgeTorque;
 
         public ThingMovement(World world)
         {
             this.world = world;
             boomSectorTouchingList = new BoomSectorTouchingList(world);
+            boomLedgeTorque = new BoomLedgeTorque(world);
 
             InitThingMovement();
             InitSlideMovement();
@@ -60,9 +65,11 @@ namespace ManagedDoom
         private Fixed currentCeilingZ;
         private Fixed currentDropoffZ;
         private bool floatOk;
+        private bool fellDown;
 
         private LineDef currentCeilingLine;
         private LineDef currentBlockingLine;
+        private LineDef currentMbfBounceLine;
 
         public int crossedSpecialCount;
         public LineDef[] crossedSpecials;
@@ -123,6 +130,7 @@ namespace ManagedDoom
 
                     thing.BlockPrev = null;
                     thing.BlockNext = link;
+                    thing.BlockMapIndex = index;
 
                     if (link != null)
                     {
@@ -136,7 +144,12 @@ namespace ManagedDoom
                     // Thing is off the map.
                     thing.BlockNext = null;
                     thing.BlockPrev = null;
+                    thing.BlockMapIndex = -1;
                 }
+            }
+            else
+            {
+                thing.BlockMapIndex = -1;
             }
         }
 
@@ -172,7 +185,13 @@ namespace ManagedDoom
             // Inert things don't need to be in blockmap.
             if ((thing.Flags & MobjFlags.NoBlockMap) == 0)
             {
-                // Unlink from block map.
+                // Unlink from the block where the thing was actually linked.
+                // Doom's bprev is a pointer-to-pointer, so unlinking does not
+                // depend on the actor's current X/Y. ManagedDoom stores the
+                // previous actor instead, therefore a head node also needs to
+                // remember its owning block explicitly. This matters for MBF
+                // projectiles such as the grenade, whose spawn check advances
+                // X/Y before P_TryMove while the actor is present in BLOCKMAP.
                 if (thing.BlockNext != null)
                 {
                     thing.BlockNext.BlockPrev = thing.BlockPrev;
@@ -182,15 +201,14 @@ namespace ManagedDoom
                 {
                     thing.BlockPrev.BlockNext = thing.BlockNext;
                 }
-                else
+                else if (thing.BlockMapIndex != -1)
                 {
-                    var index = map.BlockMap.GetIndex(thing.X, thing.Y);
-
-                    if (index != -1)
-                    {
-                        map.BlockMap.ThingLists[index] = thing.BlockNext;
-                    }
+                    map.BlockMap.ThingLists[thing.BlockMapIndex] = thing.BlockNext;
                 }
+
+                thing.BlockNext = null;
+                thing.BlockPrev = null;
+                thing.BlockMapIndex = -1;
             }
         }
 
@@ -237,11 +255,17 @@ namespace ManagedDoom
 
             if (line.BackSector == null)
             {
-                // One sided line.
+                // One sided line. Keep the contacted line for MBF wall-bounce
+                // reflection without changing the existing BlockingLine value
+                // used by monster/door compatibility code.
+                if (MbfBounceCompatibility.IsBouncer(world.Options.Compatibility, currentThing))
+                    currentMbfBounceLine = line;
                 return false;
             }
 
-            if ((currentThing.Flags & MobjFlags.Missile) == 0)
+            if (!MbfBounceCompatibility.UsesMissileLineBlockingRules(
+                    world.Options.Compatibility,
+                    currentThing))
             {
                 if ((line.Flags & LineFlags.Blocking) != 0)
                 {
@@ -265,12 +289,16 @@ namespace ManagedDoom
                 currentCeilingZ = mc.OpenTop;
                 currentCeilingLine = line;
                 currentBlockingLine = line;
+                if (MbfBounceCompatibility.IsBouncer(world.Options.Compatibility, currentThing))
+                    currentMbfBounceLine = line;
             }
 
             if (mc.OpenBottom > currentFloorZ)
             {
                 currentFloorZ = mc.OpenBottom;
                 currentBlockingLine = line;
+                if (MbfBounceCompatibility.IsBouncer(world.Options.Compatibility, currentThing))
+                    currentMbfBounceLine = line;
             }
 
             if (mc.LowFloor < currentDropoffZ)
@@ -290,7 +318,11 @@ namespace ManagedDoom
 
         private bool CheckThing(Mobj thing)
         {
-            if ((thing.Flags & (MobjFlags.Solid | MobjFlags.Special | MobjFlags.Shootable)) == 0)
+            var baseInteractionFlags = MobjFlags.Solid | MobjFlags.Special | MobjFlags.Shootable;
+            if ((thing.Flags & baseInteractionFlags) == 0 &&
+                !MbfTouchyCompatibility.RequiresThingCollisionCheck(
+                    world.Options.Compatibility,
+                    thing))
             {
                 return true;
             }
@@ -310,6 +342,18 @@ namespace ManagedDoom
                 return true;
             }
 
+            // MBF TOUCHY checks the object being contacted, not the mover.
+            // This preserves the original rule that an inert touchy actor does
+            // not trigger merely because it is the only object moving.
+            if (MbfTouchyCompatibility.ShouldActivateOnThingContact(
+                    world.Options.Compatibility,
+                    thing,
+                    currentThing))
+            {
+                world.ThingInteraction.DamageMobj(thing, null, null, thing.Health);
+                return true;
+            }
+
             // Check for skulls slamming into things.
             if ((currentThing.Flags & MobjFlags.SkullFly) != 0)
             {
@@ -323,6 +367,38 @@ namespace ManagedDoom
                 currentThing.SetState(currentThing.Info.SpawnState);
 
                 // Stop moving.
+                return false;
+            }
+
+            // MBF lets non-solid BOUNCES actors interact with solid actors
+            // using the same vertical/source filtering as the original path,
+            // but without applying the missile damage branch.
+            if (MbfBounceCompatibility.IsNonSolidNonMissileBouncer(
+                    world.Options.Compatibility,
+                    currentThing))
+            {
+                if (currentThing.Z > thing.Z + thing.Height ||
+                    currentThing.Z + currentThing.Height < thing.Z)
+                {
+                    return true;
+                }
+
+                if (currentThing.Target != null &&
+                    (currentThing.Target.Type == thing.Type ||
+                     (currentThing.Target.Type == MobjType.Knight && thing.Type == MobjType.Bruiser) ||
+                     (currentThing.Target.Type == MobjType.Bruiser && thing.Type == MobjType.Knight)))
+                {
+                    if (thing == currentThing.Target)
+                        return true;
+
+                    if (thing.Type != MobjType.Player)
+                        return false;
+                }
+
+                if ((thing.Flags & MobjFlags.Solid) == 0)
+                    return true;
+
+                MbfBounceCompatibility.BounceFromSolidThing(currentThing);
                 return false;
             }
 
@@ -436,6 +512,7 @@ namespace ManagedDoom
 
             currentCeilingLine = null;
             currentBlockingLine = null;
+            currentMbfBounceLine = null;
 
             // The base floor / ceiling is from the subsector that contains the point.
             // Any contacted lines the step closer together will adjust them.
@@ -502,7 +579,17 @@ namespace ManagedDoom
         /// </summary>
         public bool TryMove(Mobj thing, Fixed x, Fixed y)
         {
+            return TryMove(thing, x, y, ThingDropoffMode.Disallow);
+        }
+
+        internal bool TryMove(
+            Mobj thing,
+            Fixed x,
+            Fixed y,
+            ThingDropoffMode dropoffMode)
+        {
             floatOk = false;
+            fellDown = false;
 
             if (!CheckPosition(thing, x, y))
             {
@@ -534,11 +621,80 @@ namespace ManagedDoom
                     return false;
                 }
 
-                if ((thing.Flags & (MobjFlags.DropOff | MobjFlags.Float)) == 0 &&
-                    currentFloorZ - currentDropoffZ > Fixed.FromInt(24))
+                if ((thing.Flags & (MobjFlags.DropOff | MobjFlags.Float)) == 0)
                 {
-                    // Don't stand over a dropoff.
-                    return false;
+                    var compatibility = world.Options.Compatibility;
+                    var mbfOptions = world.Options.MbfOptions;
+
+                    // comp_ledgeblock adds an unconditional ground-monster
+                    // ledge block. MBF21 temporarily disables it for the next
+                    // XY move after scroller/pusher momentum is applied.
+                    if (MbfLedgeBlockCompatibility.BlocksTallDropoff(
+                            compatibility,
+                            mbfOptions.CompLedgeBlock,
+                            mbfOptions.HasCompLedgeBlockOverride,
+                            thing.MbfScrollingMovement,
+                            currentFloorZ,
+                            currentDropoffZ))
+                    {
+                        return false;
+                    }
+
+                    // comp_dropoff restores Doom's old absolute ledge block.
+                    // It overrides both momentum permission and dog jumping.
+                    if (MbfDropoffCompatibility.UsesClassicBlocking(
+                            compatibility,
+                            mbfOptions.CompDropoff))
+                    {
+                        if (currentFloorZ - currentDropoffZ > MbfDropoffCompatibility.MaxStep)
+                        {
+                            return false;
+                        }
+                    }
+                    else
+                    {
+                        var targetedDropoffAllowed =
+                            dropoffMode == ThingDropoffMode.Targeted128 &&
+                            MbfDogJumping.AllowsTargetedDropoff(
+                                thing,
+                                currentFloorZ,
+                                currentDropoffZ);
+
+                        var externalMomentumRequested =
+                            dropoffMode == ThingDropoffMode.Allow;
+                        var momentumDropoffAllowed =
+                            BoomMomentumDropoff.Allows(
+                                compatibility,
+                                externalMomentumRequested) ||
+                            MbfDropoffCompatibility.AllowsExternalMomentumDropoff(
+                                compatibility,
+                                mbfOptions.CompDropoff,
+                                externalMomentumRequested);
+
+                        if (!targetedDropoffAllowed &&
+                            !momentumDropoffAllowed &&
+                            MbfMonkeyClimbing.BlocksMove(
+                                compatibility,
+                                mbfOptions.Monkeys,
+                                thing,
+                                currentFloorZ,
+                                currentDropoffZ))
+                        {
+                            // Voluntary movement still obeys the normal ledge
+                            // rule. monkeys only changes how that rule compares
+                            // the old and new floor/dropoff edges.
+                            return false;
+                        }
+
+                        if ((targetedDropoffAllowed || momentumDropoffAllowed) &&
+                            (thing.Flags & MobjFlags.NoGravity) == 0 &&
+                            thing.Z - currentFloorZ > MbfDropoffCompatibility.MaxStep)
+                        {
+                            // Leave the old Z in place so gravity performs the
+                            // fall rather than snapping the actor downward.
+                            fellDown = true;
+                        }
+                    }
                 }
             }
 
@@ -549,6 +705,7 @@ namespace ManagedDoom
             var oldx = thing.X;
             var oldy = thing.Y;
             thing.FloorZ = currentFloorZ;
+            thing.DropoffZ = currentDropoffZ;
             thing.CeilingZ = currentCeilingZ;
             thing.X = x;
             thing.Y = y;
@@ -630,8 +787,12 @@ namespace ManagedDoom
 
                 if (moveX > halfMaxMove ||
                     moveY > halfMaxMove ||
-                    BoomMovementQuirks.ShouldSplitNegativeDisplacement(
-                        moveX, moveY, halfMaxMove, world.Options.Compatibility))
+                    MbfMoveBlockCompatibility.ShouldSplitNegativeDisplacement(
+                        moveX,
+                        moveY,
+                        halfMaxMove,
+                        world.Options.Compatibility,
+                        world.Options.MbfOptions.CompMoveBlock))
                 {
                     pMoveX = thing.X + moveX / 2;
                     pMoveY = thing.Y + moveY / 2;
@@ -645,10 +806,16 @@ namespace ManagedDoom
                     moveX = moveY = Fixed.Zero;
                 }
 
-                if (!TryMove(thing, pMoveX, pMoveY))
+                if (!TryMove(thing, pMoveX, pMoveY, ThingDropoffMode.Allow))
                 {
-                    // Blocked move.
-                    if (thing.Player != null)
+                    // MBF BOUNCES reflection takes precedence over player
+                    // sliding for non-missile bouncers.
+                    if (MbfBounceCompatibility.IsBouncer(world.Options.Compatibility, thing) &&
+                        (thing.Flags & MobjFlags.Missile) == 0)
+                    {
+                        MbfBounceCompatibility.BounceFromLine(thing, currentMbfBounceLine);
+                    }
+                    else if (thing.Player != null)
                     {   // Try to slide along it.
                         SlideMove(thing);
                     }
@@ -679,6 +846,10 @@ namespace ManagedDoom
             {
                 // Debug option for no sliding at all.
                 thing.MomX = thing.MomY = Fixed.Zero;
+                if (player.Mobj == thing)
+                {
+                    MbfPlayerBobbing.Stop(player, world.Options.Compatibility);
+                }
                 return;
             }
 
@@ -694,9 +865,16 @@ namespace ManagedDoom
                 return;
             }
 
-            if ((thing.Flags & MobjFlags.Corpse) != 0)
+            if (MbfBounceCompatibility.PreservesLedgeMomentum(
+                    world.Options.Compatibility,
+                    thing) ||
+                (thing.Flags & MobjFlags.Corpse) != 0 ||
+                thing.BoomLedgeFalling)
             {
-                // Do not stop sliding if halfway off a step with some momentum.
+                // Boom also preserves momentum for inert objects currently
+                // being pushed off a ledge by P_ApplyTorque. Without this,
+                // small torque impulses are killed by normal floor friction
+                // before the object's radius clears the higher floor.
                 if (thing.MomX > Fixed.One / 4 ||
                     thing.MomX < -Fixed.One / 4 ||
                     thing.MomY > Fixed.One / 4 ||
@@ -713,7 +891,13 @@ namespace ManagedDoom
                 thing.MomX < stopSpeed &&
                 thing.MomY > -stopSpeed &&
                 thing.MomY < stopSpeed &&
-                (player == null || (player.Cmd.ForwardMove == 0 && player.Cmd.SideMove == 0)))
+                (player == null ||
+                 (player.Cmd.ForwardMove == 0 && player.Cmd.SideMove == 0) ||
+                 MbfVoodooScrollerCompatibility.ShouldForceStop(
+                     thing,
+                     world.Options.Compatibility,
+                     world.Options.MbfOptions.CompVoodooScroller,
+                     world.Options.MbfOptions.HasCompVoodooScrollerOverride)))
             {
                 // If in a walking frame, stop moving.
                 if (player != null && (player.Mobj.State.Number - (int)MobjState.PlayRun1) < 4)
@@ -723,6 +907,10 @@ namespace ManagedDoom
 
                 thing.MomX = Fixed.Zero;
                 thing.MomY = Fixed.Zero;
+                if (player != null && player.Mobj == thing)
+                {
+                    MbfPlayerBobbing.Stop(player, world.Options.Compatibility);
+                }
             }
             else
             {
@@ -732,14 +920,52 @@ namespace ManagedDoom
                     frictionFactor = BoomMovementQuirks.GetCoastingFriction(
                         thing, oldX, oldY, world.Options.Compatibility);
                 }
+                else if (MbfMonsterFriction.Applies(
+                             world.Options.Compatibility,
+                             world.Options.MbfOptions.MonsterFriction,
+                             thing))
+                {
+                    frictionFactor = MbfMonsterFriction.GetCoastingFriction(
+                        world.Options.Compatibility,
+                        world.Options.MbfOptions.MonsterFriction,
+                        thing);
+                }
+                else if (MbfMonsterFriction.AppliesToCorpseCoasting(
+                             world.Options.Compatibility,
+                             world.Options.MbfOptions.MonsterFriction,
+                             thing))
+                {
+                    // MBF's floor friction still controls residual momentum after
+                    // a monster becomes a corpse. On full ice this preserves the
+                    // death impulse until the corpse reaches ordinary floor.
+                    frictionFactor = MbfMonsterFriction.GetCorpseCoastingFriction(
+                        world.Options.Compatibility,
+                        world.Options.MbfOptions.MonsterFriction,
+                        thing);
+                }
 
                 thing.MomX = thing.MomX * frictionFactor;
                 thing.MomY = thing.MomY * frictionFactor;
+
+                if (player != null && player.Mobj == thing)
+                {
+                    // Boom 2.02 and later decay bob momentum at ordinary Doom
+                    // friction even while physical momentum coasts on an icy floor.
+                    MbfPlayerBobbing.ApplyOriginalFriction(
+                        player, world.Options.Compatibility);
+                }
             }
         }
 
         public void ZMovement(Mobj thing)
         {
+            if (MbfBounceCompatibility.IsBouncer(world.Options.Compatibility, thing) &&
+                thing.MomZ != Fixed.Zero)
+            {
+                BouncerZMovement(thing);
+                return;
+            }
+
             // Check for smooth step up.
             if (thing.Player != null && thing.Z < thing.FloorZ)
             {
@@ -784,9 +1010,10 @@ namespace ManagedDoom
                 // The lost soul bounce fix below is based on Chocolate Doom's implementation.
                 //
 
-                var correctLostSoulBounce = BoomLostSoulCompatibility.UsesCorrectBounce(
+                var correctLostSoulBounce = MbfLostSoulCompatibility.UsesCorrectBounce(
                     world.Options.Compatibility,
-                    world.Options.GameVersion);
+                    world.Options.GameVersion,
+                    world.Options.MbfOptions.CompSoul);
 
                 if (correctLostSoulBounce && (thing.Flags & MobjFlags.SkullFly) != 0)
                 {
@@ -796,13 +1023,27 @@ namespace ManagedDoom
 
                 if (thing.MomZ < Fixed.Zero)
                 {
-                    if (thing.Player != null && thing.MomZ < -gravity * 8)
+                    if (MbfTouchyCompatibility.ShouldActivateOnFloorImpact(
+                            world.Options.Compatibility,
+                            thing,
+                            thing.MomZ))
+                    {
+                        world.ThingInteraction.DamageMobj(thing, null, null, thing.Health);
+                    }
+                    else if (thing.Player != null && thing.MomZ < -gravity * 8)
                     {
                         // Squat down.
                         // Decrease viewheight for a moment after hitting the ground (hard),
                         // and utter appropriate sound.
                         thing.Player.DeltaViewHeight = (thing.MomZ >> 3);
-                        world.StartSound(thing, Sfx.OOF, SfxType.Voice);
+
+                        if (MbfSoundCompatibility.ShouldPlayHardLandingSound(
+                            world.Options.Compatibility,
+                            world.Options.MbfOptions.CompSound,
+                            thing.Health))
+                        {
+                            world.StartSound(thing, Sfx.OOF, SfxType.Voice);
+                        }
                     }
                     thing.MomZ = Fixed.Zero;
                 }
@@ -836,9 +1077,10 @@ namespace ManagedDoom
             if (thing.Z + thing.Height > thing.CeilingZ)
             {
                 // Hit the ceiling.
-                var correctLostSoulBounce = BoomLostSoulCompatibility.UsesCorrectBounce(
+                var correctLostSoulBounce = MbfLostSoulCompatibility.UsesCorrectBounce(
                     world.Options.Compatibility,
-                    world.Options.GameVersion);
+                    world.Options.GameVersion,
+                    world.Options.MbfOptions.CompSoul);
 
                 if (correctLostSoulBounce &&
                     (thing.Flags & MobjFlags.SkullFly) != 0)
@@ -869,11 +1111,118 @@ namespace ManagedDoom
         }
 
 
+        private void BouncerZMovement(Mobj thing)
+        {
+            thing.Z += thing.MomZ;
+
+            if (thing.Z <= thing.FloorZ)
+            {
+                thing.Z = thing.FloorZ;
+
+                if (thing.MomZ < Fixed.Zero)
+                {
+                    var incomingMomentumZ = thing.MomZ;
+                    thing.MomZ = -thing.MomZ;
+                    thing.MomZ = MbfBounceCompatibility.ApplyFloorDecay(
+                        thing,
+                        thing.MomZ,
+                        gravity);
+
+                    if (MbfTouchyCompatibility.ShouldActivateOnFloorImpact(
+                            world.Options.Compatibility,
+                            thing,
+                            incomingMomentumZ))
+                    {
+                        world.ThingInteraction.DamageMobj(thing, null, null, thing.Health);
+                    }
+                    else
+                    {
+                        AdjustFloatingActor(thing);
+                    }
+
+                    return;
+                }
+            }
+            else if (thing.Z >= thing.CeilingZ - thing.Height)
+            {
+                thing.Z = thing.CeilingZ - thing.Height;
+
+                if (thing.MomZ > Fixed.Zero)
+                {
+                    var skyCeiling = thing.Subsector.Sector.CeilingFlat == world.Map.SkyFlatNumber;
+
+                    if (!skyCeiling || (thing.Flags & MobjFlags.NoGravity) != 0)
+                    {
+                        thing.MomZ = -thing.MomZ;
+                    }
+                    else if ((thing.Flags & MobjFlags.Missile) != 0)
+                    {
+                        world.ThingAllocation.RemoveMobj(thing);
+                        return;
+                    }
+
+                    AdjustFloatingActor(thing);
+                    return;
+                }
+            }
+            else
+            {
+                if ((thing.Flags & MobjFlags.NoGravity) == 0)
+                {
+                    thing.MomZ -= MbfBounceCompatibility.GetVerticalGravityStep(thing, gravity);
+                }
+
+                AdjustFloatingActor(thing);
+                return;
+            }
+
+            // Came to rest. Keep the ordinary missile/no-clip handling below
+            // isolated from non-missile MBF bouncers.
+            thing.MomZ = Fixed.Zero;
+
+            if ((thing.Flags & MobjFlags.Missile) != 0 &&
+                (thing.Flags & MobjFlags.NoClip) == 0)
+            {
+                world.ThingInteraction.ExplodeMissile(thing);
+                return;
+            }
+
+            AdjustFloatingActor(thing);
+        }
+
+        private static void AdjustFloatingActor(Mobj thing)
+        {
+            if ((thing.Flags & MobjFlags.Float) == 0 ||
+                (thing.Flags & (MobjFlags.SkullFly | MobjFlags.InFloat)) != 0 ||
+                thing.Target == null ||
+                !BoomLedgeTorque.IsSentient(thing))
+            {
+                return;
+            }
+
+            var dist = Geometry.AproxDistance(
+                thing.X - thing.Target.X,
+                thing.Y - thing.Target.Y);
+            var delta = (thing.Target.Z + (thing.Height >> 1)) - thing.Z;
+
+            if (delta < Fixed.Zero && dist < -(delta * 3))
+                thing.Z -= FloatSpeed;
+            else if (delta > Fixed.Zero && dist < delta * 3)
+                thing.Z += FloatSpeed;
+        }
+
         public Fixed CurrentFloorZ => currentFloorZ;
         public Fixed CurrentCeilingZ => currentCeilingZ;
+        public void UpdateBoomLedgeTorqueAtRest(Mobj thing)
+        {
+            boomLedgeTorque.UpdateAtRest(thing);
+        }
+
         public Fixed CurrentDropoffZ => currentDropoffZ;
         public LineDef BlockingLine => currentBlockingLine;
         public bool FloatOk => floatOk;
+
+        public bool FellDown => fellDown;
 
 
 
@@ -1078,7 +1427,7 @@ namespace ManagedDoom
                 var newX = thing.MomX * bestSlideFrac;
                 var newY = thing.MomY * bestSlideFrac;
 
-                if (!TryMove(thing, thing.X + newX, thing.Y + newY))
+                if (!TryMove(thing, thing.X + newX, thing.Y + newY, ThingDropoffMode.Allow))
                 {
                     // The move most have hit the middle, so stairstep.
                     StairStep(thing);
@@ -1109,7 +1458,18 @@ namespace ManagedDoom
             thing.MomX = slideMoveX;
             thing.MomY = slideMoveY;
 
-            if (!TryMove(thing, thing.X + slideMoveX, thing.Y + slideMoveY))
+            var slidePlayer = thing.Player;
+            if (slidePlayer != null &&
+                slidePlayer.Mobj == thing &&
+                MbfPlayerBobbing.Applies(world.Options.Compatibility))
+            {
+                if (Fixed.Abs(slidePlayer.BobMomX) > Fixed.Abs(slideMoveX))
+                    slidePlayer.BobMomX = slideMoveX;
+                if (Fixed.Abs(slidePlayer.BobMomY) > Fixed.Abs(slideMoveY))
+                    slidePlayer.BobMomY = slideMoveY;
+            }
+
+            if (!TryMove(thing, thing.X + slideMoveX, thing.Y + slideMoveY, ThingDropoffMode.Allow))
             {
                 goto retry;
             }
@@ -1117,9 +1477,9 @@ namespace ManagedDoom
 
         private void StairStep(Mobj thing)
         {
-            if (!TryMove(thing, thing.X, thing.Y + thing.MomY))
+            if (!TryMove(thing, thing.X, thing.Y + thing.MomY, ThingDropoffMode.Allow))
             {
-                TryMove(thing, thing.X + thing.MomX, thing.Y);
+                TryMove(thing, thing.X + thing.MomX, thing.Y, ThingDropoffMode.Allow);
             }
         }
 
@@ -1174,11 +1534,12 @@ namespace ManagedDoom
             // Kill anything occupying the position.
             currentThing = thing;
             currentFlags = thing.Flags;
-            teleportCanStomp = BoomTeleportQuirks.CanTelefragAtDestination(
+            teleportCanStomp = MbfTelefragCompatibility.CanTelefragAtDestination(
                 thing,
                 bossTeleport,
                 world.Options.Map,
-                world.Options.Compatibility);
+                world.Options.Compatibility,
+                world.Options.MbfOptions.CompTelefrag);
 
             currentX = x;
             currentY = y;
@@ -1223,6 +1584,7 @@ namespace ManagedDoom
             UnsetThingPosition(thing);
 
             thing.FloorZ = currentFloorZ;
+            thing.DropoffZ = currentDropoffZ;
             thing.CeilingZ = currentCeilingZ;
             thing.X = x;
             thing.Y = y;

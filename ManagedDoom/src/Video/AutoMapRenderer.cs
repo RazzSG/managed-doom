@@ -201,7 +201,7 @@ namespace ManagedDoom.Video
                         }
                     }
                 }
-                else if (player.Powers[(int)PowerType.AllMap] > 0)
+                else if (player.Powers[(int)PowerType.AllMap] != 0)
                 {
                     if ((line.Flags & LineFlags.DontDraw) == 0)
                     {
@@ -278,7 +278,7 @@ namespace ManagedDoom.Video
                 }
 
                 int color;
-                if (player.Powers[(int)PowerType.Invisibility] > 0)
+                if (player.Powers[(int)PowerType.Invisibility] != 0)
                 {
                     // Close to black.
                     color = 246;

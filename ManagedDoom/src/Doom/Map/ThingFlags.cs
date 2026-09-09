@@ -28,6 +28,10 @@ namespace ManagedDoom
         Ambush = 8,
         MultiplayerOnly = 16,
         NotDeathmatch = 32,
-        NotCooperative = 64
+        NotCooperative = 64,
+
+        // MBF map-thing extensions.
+        Friendly = 128,
+        Reserved = 256
     }
 }

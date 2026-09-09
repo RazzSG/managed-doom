@@ -131,7 +131,12 @@ namespace ManagedDoom
             new DoomString("skeact"),
             new DoomString("skesit"),
             new DoomString("skeatk"),
-            new DoomString("radio")
+            new DoomString("radio"),
+            new DoomString("dgsit"),
+            new DoomString("dgatk"),
+            new DoomString("dgact"),
+            new DoomString("dgdth"),
+            new DoomString("dgpain")
         };
     }
 }
